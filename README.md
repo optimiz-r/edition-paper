@@ -180,6 +180,10 @@ keeps its own copy of edition-paper in npm's cache (`~/.npm/_npx`).
 - **It waits, then prints anyway.** The CLI gives the page 90 seconds to finish
   composing and then prints what has settled. A run that hangs is stopped after five
   minutes.
+- **"Printing without 1 picture that never loaded: …"** Once the page is composed,
+  the CLI gives its pictures up to 20 seconds more, then prints. That line names
+  each picture that failed or was still loading, so an empty frame on the paper has
+  a reason in the log: usually the site hosting that picture was down or slow.
 
 ## License
 

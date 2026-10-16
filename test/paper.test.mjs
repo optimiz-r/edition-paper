@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { printedImages } from '../lib/images.mjs';
 import { countStories, isAnalytics, localDate, pdfPath, printPdf, READY_SELECTOR, renderPaper } from '../lib/paper.mjs';
 
 test('the PDF is named for the local date', () => {
@@ -27,11 +28,13 @@ test("PostHog's servers are blocked; Edition's own files and the sources are not
   }
 });
 
-test('renderPaper: no service worker, analytics blocked, waits for the ready flag, A4', async () => {
+test('renderPaper: no service worker, analytics blocked, waits for the ready flag and the pictures, A4', async () => {
   const log = [];
   const page = {
     goto: async (url, options) => log.push(['goto', url, options.waitUntil]),
     waitForSelector: async (selector) => log.push(['wait', selector]),
+    emulateMedia: async (options) => log.push(['media', options.media]),
+    evaluate: async (fn) => (log.push(['pictures', fn === printedImages]), { loaded: 3, pending: [], broken: [] }),
     locator: (selector) => ({
       count: async () => (log.push(['count', selector]), 1),
       locator: (inner) => ({ count: async () => (log.push(['count', `${selector} ${inner}`]), 41) }),
@@ -62,6 +65,8 @@ test('renderPaper: no service worker, analytics blocked, waits for the ready fla
     ['route', true, true],
     ['goto', 'https://edition.cafe/paper?setup=W3s', 'domcontentloaded'],
     ['wait', READY_SELECTOR],
+    ['media', 'print'],
+    ['pictures', true],
     ['count', '.print-columns'],
     ['count', '.print-columns .story, .plate'],
     ['pdf', { path: '/tmp/edition.pdf', format: 'A4', printBackground: false }],
