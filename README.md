@@ -12,18 +12,16 @@ it's installed, otherwise Playwright's Chromium.
 
 ## Quick start
 
-1. Open [edition.cafe/paper](https://edition.cafe/paper) and click **Copy 8am
-   command**. The button copies a line like this:
+1. Open [edition.cafe/paper](https://edition.cafe/paper) on a computer and click
+   **Copy 8am command**. The button copies a line like this, ready to paste into a
+   terminal:
 
    ```
-   npm run paper -- --setup W3siaWQiOiJoYWNrZXItbmV3cyIs…
+   npx edition-paper --setup W3siaWQiOiJoYWNrZXItbmV3cyIs…
    ```
 
-   That line was written for Edition's own repository. Here you need only the part
-   from `--setup` on.
-
-   If the button says "Could not build a safe paper command.", hide the GitHub card
-   on your front page and try again. The GitHub card can't travel in a setup yet.
+   A page from before this package copies `npm run paper -- --setup …` instead.
+   Keep the part from `--setup` on and put `npx edition-paper` in front.
 
 2. Try it once without printing:
 
@@ -56,7 +54,7 @@ is switched off.
 | `--install-schedule <HHMM>` | macOS: run every day at HHMM, 24-hour (`0800`, or `08:00`). Uses the other flags you pass with it. |
 | `--uninstall-schedule` | macOS: remove the daily run. |
 | `--browser <auto\|chrome\|chromium>` | `auto` (default) uses Google Chrome if it's installed, else Playwright's Chromium. |
-| `--url <origin>` | The Edition to load. Default `https://edition.cafe`; `http://localhost:5199` for a dev server. |
+| `--url <origin>` | The Edition to load. Default `https://edition.cafe`; `http://localhost:5173` for a dev server (`npm run dev` in a clone of the app). |
 | `-h`, `--help` | Show the flags. |
 | `-v`, `--version` | Show the version. |
 
@@ -67,9 +65,12 @@ is switched off.
   The parameter is your list of sources (names, feed addresses, subreddits) as
   base64url-encoded JSON. It is encoded, not encrypted, and it travels in the query
   string, so edition.cafe's host (Vercel) receives it with the request, like any page
-  address. Private sources, such as a Reddit front page that carries a feed token,
-  are never in it: the app leaves them out when it copies the command and tells you
-  so.
+  address. The app leaves out what it treats as private, and tells you so when it
+  copies the command: a Reddit front page, and any feed whose address has a query
+  string, a `#` fragment, a username or password, a non-standard port, or a private
+  host such as `localhost`. It can't see a key inside the path itself, like a
+  Pinboard `secret:` feed or a podcast's private feed; that address goes along like
+  any other, so leave such a feed off your front page before you copy.
 - **Your sources, fetched by the page.** /paper then loads your sources the way it
   does when you open it yourself: some straight from the source (Hacker News,
   Reddit, Are.na), most other feeds through edition.cafe's own proxy, and pictures

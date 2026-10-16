@@ -6,15 +6,36 @@ import { MAX_SETUP_LENGTH, paperUrl, readSetup } from '../lib/setup.mjs';
 
 // Exactly what "Copy 8am command" put on the clipboard on live
 // edition.cafe/paper, 2026-10-16 (GitHub hidden; Hacker News, Product Hunt,
-// Design Milk).
+// Design Milk). The page then still copied the line for the app's own repo.
 const COPIED = readFileSync(new URL('./fixtures/copied-command.txt', import.meta.url), 'utf8');
 const LIVE_SETUP = COPIED.slice(COPIED.indexOf('--setup ') + '--setup '.length);
+
+// Exactly what the button copies once the app ships this package's line
+// (paperCommand in the app's src/lib/paper-command.ts), clicked on a dev
+// server of that change, 2026-10-16: the starter feed, GitHub card included.
+const COPIED_NPX = readFileSync(new URL('./fixtures/copied-command-npx.txt', import.meta.url), 'utf8');
 
 // Same steps as encodeSetup in the app's src/lib/edition.ts.
 const encodeLikeTheApp = (channels) => Buffer.from(JSON.stringify(channels), 'utf8').toString('base64url');
 
-test('the copied command is npm run paper -- --setup <param>', () => {
+test('the live page copied npm run paper -- --setup <param>', () => {
   assert.match(COPIED, /^npm run paper -- --setup [A-Za-z0-9_-]+$/);
+});
+
+test("the app's npx line runs as pasted, with or without a schedule", () => {
+  const words = COPIED_NPX.split(' ');
+  assert.deepEqual(words.slice(0, 2), ['npx', 'edition-paper']);
+  const argv = words.slice(2);
+  assert.match(argv[1], /^[A-Za-z0-9_-]+$/);
+
+  const render = parseCliArgs(argv, { home: '/h', cwd: '/h' });
+  assert.equal(render.command, 'render');
+  assert.equal(render.setup, argv[1]);
+  assert.equal(render.sources, 4);
+
+  const install = parseCliArgs([...argv, '--install-schedule', '0800'], { home: '/h', cwd: '/h' });
+  assert.equal(install.command, 'install');
+  assert.deepEqual(scheduledArgs(install), ['--setup', argv[1]]);
 });
 
 test('the live parameter is accepted and passed through untouched', () => {

@@ -19,6 +19,9 @@ test('--help and --version', () => {
   const help = run('--help');
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--install-schedule <HHMM>/);
+  // The help says what the button copies today.
+  assert.match(help.stdout, /copies\s+"npx edition-paper --setup <param>"/);
+  assert.doesNotMatch(help.stdout, /npm run paper/);
   assert.equal(run('--version').stdout.trim(), VERSION);
 });
 
