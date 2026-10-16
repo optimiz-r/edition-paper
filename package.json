@@ -1,0 +1,46 @@
+{
+  "name": "edition-paper",
+  "version": "1.0.0",
+  "description": "Edition's morning paper, printed. Saves edition.cafe/paper as an A4 PDF and, if you ask it to, prints it every morning.",
+  "type": "module",
+  "bin": {
+    "edition-paper": "cli.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "lib/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright-core": "^1.64.1"
+  },
+  "keywords": [
+    "edition",
+    "edition.cafe",
+    "newspaper",
+    "morning-paper",
+    "print",
+    "pdf",
+    "hacker-news",
+    "rss",
+    "launchd",
+    "cli"
+  ],
+  "homepage": "https://edition.cafe/paper",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/optimiz-r/edition-paper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/optimiz-r/edition-paper/issues"
+  },
+  "author": "Domenico Plumitallo",
+  "license": "BSD-3-Clause"
+}
