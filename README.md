@@ -54,7 +54,7 @@ is switched off.
 | `--install-schedule <HHMM>` | macOS: run every day at HHMM, 24-hour (`0800`, or `08:00`). Uses the other flags you pass with it. |
 | `--uninstall-schedule` | macOS: remove the daily run. |
 | `--browser <auto\|chrome\|chromium>` | `auto` (default) uses Google Chrome if it's installed, else Playwright's Chromium. |
-| `--url <origin>` | The Edition to load. Default `https://edition.cafe`; `http://localhost:5173` for a dev server (`npm run dev` in a clone of the app). |
+| `--url <origin>` | The Edition to load. Default `https://edition.cafe`; `http://localhost:5173` for a local dev server. |
 | `-h`, `--help` | Show the flags. |
 | `-v`, `--version` | Show the version. |
 
@@ -73,8 +73,10 @@ is switched off.
   any other, so leave such a feed off your front page before you copy.
 - **Your sources, fetched by the page.** /paper then loads your sources the way it
   does when you open it yourself: some straight from the source (Hacker News,
-  Reddit, Are.na), most other feeds through edition.cafe's own proxy, and pictures
-  from wherever they are hosted.
+  Are.na), most other feeds through edition.cafe's own proxy, and pictures
+  from wherever they are hosted. Subreddits go through the proxy as RSS: the
+  CLI's browser has no Reddit connection, and Reddit stops serving those feeds
+  on November 13, 2026, so a subreddit section will print empty after that.
 - **Nothing from the CLI itself.** No telemetry, no update checks, no account.
 - **No analytics.** Edition's site leaves its analytics (PostHog) off in automated
   browsers. It checks `navigator.webdriver`, which Playwright sets, so a run of this
@@ -128,7 +130,7 @@ be asked whether `node` can write there. Better to answer that while you're at
 the Mac than to miss it at 8am.
 
 There is one schedule at a time: installing again replaces it, including one set up
-earlier from Edition's repository.
+earlier with an older version of this tool.
 
 ## Linux and Windows
 
