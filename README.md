@@ -135,16 +135,27 @@ earlier with an older version of this tool.
 ## Linux and Windows
 
 There's no built-in schedule there. `--install-schedule` installs nothing and exits
-with a ready-made line instead:
+with instructions instead:
 
-- **Linux and other Unix systems:** a cron line to add with `crontab -e`. It
-  runs this exact version through `npx` with an absolute PATH, for example:
+- **Linux and other Unix systems:** a script to save as `~/edition-paper.sh`,
+  followed by a short cron line. The script runs this exact version through
+  `npx` with an absolute PATH. Keeping the source list in the script avoids
+  cron's line-length limit. For example, save:
+
+  ```sh
+  #!/bin/sh
+  PATH=/home/you/.nvm/versions/node/v24.13.0/bin:/usr/bin:/bin exec npx --yes edition-paper@1.0.0 --setup W3siaWQiOi…
+  ```
+
+  Run `chmod 600 ~/edition-paper.sh` to keep your sources private, then add
+  this line with `crontab -e`:
 
   ```
-  0 8 * * * PATH=/home/you/.nvm/versions/node/v24.13.0/bin:/usr/bin:/bin npx --yes edition-paper@1.0.0 --setup W3siaWQiOi… >> "$HOME/edition-paper.log" 2>&1
+  0 8 * * * /bin/sh "$HOME/edition-paper.sh" >> "$HOME/edition-paper.log" 2>&1
   ```
 
-  Printing goes through CUPS (`lpr`), as on a Mac.
+  Printing goes through CUPS (`lpr`), as on a Mac. To stop it, remove the cron
+  line; you can then delete `~/edition-paper.sh`.
 - **Windows:** a line to save as a `.cmd` file and schedule daily in Task
   Scheduler. Windows has no `lpr`, so there the paper is a PDF only.
 

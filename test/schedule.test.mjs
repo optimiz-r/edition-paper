@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -55,16 +56,50 @@ test('Linux: no crash, nothing written, and a cron line that would work', async 
   const cronLine = result.message.split('\n').find((line) => line.startsWith('0 8 * * * '));
   assert.equal(
     cronLine,
-    `0 8 * * * PATH=/home/ada/.nvm/versions/node/v24.13.0/bin:/usr/bin:/bin npx --yes edition-paper@1.0.0 --setup ${SETUP} --printer 'Ada'\\''s printer' >> "$HOME/edition-paper.log" 2>&1`
+    '0 8 * * * /bin/sh "$HOME/edition-paper.sh" >> "$HOME/edition-paper.log" 2>&1'
   );
+  assert.ok(result.message.includes(`--setup ${SETUP} --printer 'Ada'\\''s printer'`));
   assert.deepEqual(readdirSync(home), []);
 });
 
-test('cron gets minute then hour, and % is escaped', () => {
+test('cron gets minute then hour, and literal % stays in the separate script', () => {
   const home = '/home/ada';
   const options = parseCliArgs(['--setup', SETUP, '--install-schedule', '0630', '--out', '/srv/100%'], { home, cwd: home });
   const message = otherPlatformHint({ platform: 'freebsd', options, version: '1.0.0', nodePath: '/usr/local/bin/node' });
-  assert.match(message, /^30 6 \* \* \* .* --out '\/srv\/100\\%' >> /m);
+  assert.match(message, /^30 6 \* \* \* \/bin\/sh /m);
+  assert.ok(message.includes("--out '/srv/100%'"));
+});
+
+test('Linux: the cron recipe runs a long setup with literal shell characters', { skip: process.platform === 'win32' }, () => {
+  const home = tempHome();
+  const bin = join(home, 'node bin');
+  mkdirSync(bin);
+  // Stand in for npx without downloading or running a package.
+  writeFileSync(join(bin, 'npx'), '#!/bin/sh\nexec "$EDITION_TEST_NODE" "$HOME/capture.mjs" "$@"\n', { mode: 0o700 });
+  writeFileSync(join(home, 'capture.mjs'), 'console.log(JSON.stringify(process.argv.slice(2)));\n');
+  const setup = Buffer.from(JSON.stringify(Array.from({ length: 8 }, (_, i) => ({
+    id: `feed-${i}`, name: `Feed ${i}`, type: 'static',
+    config: { url: `https://example.com/feed/${i}?q=design&lang=en`, isText: true },
+  })))).toString('base64url');
+  assert.ok(setup.length > 998, 'reproduce the old crontab line limit');
+  const printer = "Ada's printer $(touch injected) `touch injected` & co";
+  const out = join(home, 'Papers 100%');
+  const options = parseCliArgs(['--setup', setup, '--install-schedule', '0800', '--printer', printer, '--out', out], { home, cwd: home });
+  const hint = otherPlatformHint({ platform: 'linux', options, version: '1.0.0', nodePath: join(bin, 'node') });
+  const script = hint.slice(hint.indexOf('#!/bin/sh\n')).split('\n\n')[0];
+  writeFileSync(join(home, 'edition-paper.sh'), `${script}\n`, { mode: 0o600 });
+  const cronLine = hint.split('\n').find(line => line.startsWith('0 8 * * * '));
+  assert.ok(Buffer.byteLength(cronLine) < 998);
+  assert.ok(!cronLine.includes(setup));
+  assert.ok(!cronLine.includes('%'));
+  const result = spawnSync('/bin/sh', ['-c', cronLine.slice('0 8 * * * '.length)], {
+    cwd: home, env: { HOME: home, PATH: '/usr/bin:/bin', EDITION_TEST_NODE: process.execPath }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(join(home, 'edition-paper.log'), 'utf8')), [
+    '--yes', 'edition-paper@1.0.0', '--setup', setup, '--printer', printer, '--out', out,
+  ]);
+  assert.ok(!existsSync(join(home, 'injected')));
 });
 
 test('Windows: a Task Scheduler recipe, PDF only', () => {
