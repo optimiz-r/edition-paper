@@ -7,12 +7,18 @@ if (major < 20) {
   process.exit(1);
 }
 
+// Playwright's debug streams can include request URLs, headers and page data.
+// Set the exclusion before Playwright reads DEBUG for the first time.
+if (process.env.DEBUG) process.env.DEBUG += ',-pw:*';
+delete process.env.DEBUG_FILE;
+
+const { diagnosticLine } = await import('./lib/errors.mjs');
 const { main } = await import('./lib/main.mjs');
 try {
   process.exitCode = await main(process.argv.slice(2));
 } catch (error) {
   // Expected failures are already reported in words; this is the rest, kept
   // to one line so the launchd log stays readable.
-  console.error(`edition-paper: ${error instanceof Error ? error.message.split('\n')[0] : error}`);
+  console.error(`edition-paper: ${diagnosticLine(error)}`);
   process.exitCode = 1;
 }
