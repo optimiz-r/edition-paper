@@ -65,6 +65,15 @@ test('--browser chromium skips Chrome', async () => {
   assert.deepEqual(chromium.attempts, ['chromium']);
 });
 
+test('a missing explicit Chromium gives a remedy for that browser', async () => {
+  const chromium = fakeChromium([]);
+  await assert.rejects(launchBrowser('chromium', { chromium, version: '1.64.1' }), (error) => {
+    assert.match(error.message, /npx playwright@1\.64\.1 install chromium/);
+    assert.doesNotMatch(error.message, /Install Google Chrome/);
+    return true;
+  });
+});
+
 test('the hint names the installed playwright-core version', () => {
   assert.match(playwrightVersion(), /^\d+\.\d+\.\d+/);
   assert.equal(installHint(), `npx playwright@${playwrightVersion()} install chromium`);
