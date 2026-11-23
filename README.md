@@ -94,8 +94,8 @@ never touches your Chrome profile, history or cookies.
 
 1. It checks that a browser starts, so a missing browser shows up now rather than
    at 8am in a log.
-2. It copies this exact version of edition-paper, with the one library it needs
-   (`playwright-core`), to `~/Library/Application Support/Edition/paper/`.
+2. It copies this exact version of edition-paper and its bundled Playwright
+   Chromium driver to `~/Library/Application Support/Edition/paper/`.
 3. It writes a launchd agent, `~/Library/LaunchAgents/com.edition.paper.plist`,
    which runs that copy every day at 08:00 with the absolute path of your `node`.
    launchd starts jobs with a bare PATH and no shell profile, so nothing in the
@@ -179,8 +179,18 @@ keeps its own copy of edition-paper in npm's cache (`~/.npm/_npx`).
 ## When something goes wrong
 
 - **"No browser to print with."** Install Google Chrome, or run the one command the
-  message gives you, `npx playwright@<version> install chromium` (about 150 MB). The
-  version is pinned to the Playwright this CLI uses, so the browser matches.
+  message gives you, `npx playwright@<version> install chromium`. The version
+  matches the bundled driver. That command downloads both the full Chromium and
+  the headless shell. Archive sizes vary by platform.
+- **Prefer a smaller browser download?** On macOS and Linux, prefix the copied
+  command with `EDITION_PAPER_INSTALL_CHROMIUM=1`, for example
+  `EDITION_PAPER_INSTALL_CHROMIUM=1 npx edition-paper --setup <param> --no-print`.
+  On Windows, set the same environment variable before you run the command.
+  If the selected browser cannot start, this opts into downloading Playwright's
+  headless shell and FFmpeg. Playwright reports the archive name, size and
+  download progress as the response arrives. Any installed browser that already
+  works with the selected mode is used immediately. `--browser chrome` still
+  requires Chrome.
 - **"No stories rendered; not sending to the printer."** The page loaded but had
   nothing from the last 24 hours, or no source answered. The PDF is still saved, so
   you can open it and see which sections say "Could not reach".

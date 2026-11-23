@@ -65,6 +65,27 @@ test('--browser chromium skips Chrome', async () => {
   assert.deepEqual(chromium.attempts, ['chromium']);
 });
 
+test('opt-in installation retries Chromium only after launch fails', async () => {
+  const attempts = [];
+  let installed = false;
+  const chromium = {
+    launch: async (options) => {
+      const kind = options.channel ?? 'chromium';
+      attempts.push(kind);
+      if (kind === 'chrome' || !installed) throw new Error('Unavailable');
+      return {};
+    },
+  };
+  const install = async () => {
+    attempts.push('install');
+    installed = true;
+  };
+  await assert.rejects(launchBrowser('chrome', { chromium, install }), BrowserMissingError);
+  assert.equal((await launchBrowser('auto', { chromium, install })).kind, 'chromium');
+  assert.equal((await launchBrowser('auto', { chromium, install })).kind, 'chromium');
+  assert.deepEqual(attempts, ['chrome', 'chrome', 'chromium', 'install', 'chromium', 'chrome', 'chromium']);
+});
+
 test('the hint names the installed playwright-core version', () => {
   assert.match(playwrightVersion(), /^\d+\.\d+\.\d+/);
   assert.equal(installHint(), `npx playwright@${playwrightVersion()} install chromium`);
