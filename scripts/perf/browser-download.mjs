@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { createReadStream, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { createReadStream, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -9,6 +9,7 @@ import { fixtureServer, listen } from './fixtures.mjs';
 
 const cases = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const root = mkdtempSync(join(tmpdir(), 'edition-paper-download-'));
+console.error(`Browser onboarding workspace ${root}`);
 const fixture = await fixtureServer();
 const results = {};
 
@@ -113,6 +114,5 @@ try {
 } finally {
   fixture.server.closeAllConnections();
   fixture.server.close();
-  rmSync(root, { recursive: true, force: true });
 }
 console.log(JSON.stringify(results, null, 2));

@@ -1,19 +1,22 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixtureServer, fixtures } from './fixtures.mjs';
 import { registry } from './registry.mjs';
 
-const [manifestPath, repeatsArg = '9'] = process.argv.slice(2);
+const [manifestPath, repeatsArg = '9', mode = 'full'] = process.argv.slice(2);
 if (!manifestPath) throw new Error('Usage: node scripts/perf/run.mjs cases.json [repetitions]');
+assert(['full', 'parity'].includes(mode));
+const parityOnly = mode === 'parity';
 const cases = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const repeats = Number(repeatsArg);
 assert(Number.isInteger(repeats) && repeats >= 3);
 const root = mkdtempSync(join(tmpdir(), 'edition-paper-perf-'));
+console.error(`Benchmark workspace ${root}`);
 const probe = fileURLToPath(new URL('./probe.cjs', import.meta.url));
 const setup = Buffer.from(JSON.stringify([{ id: 'fixture', type: 'static', name: 'Fixture' }])).toString('base64url');
 const time = '/usr/bin/time';
@@ -147,9 +150,7 @@ function pdfSignature(file, cwd) {
   tool('pdftoppm', ['-r', '96', file, prefix]);
   const raster = readdirSync(cwd).filter((name) => /^raster-.*\.ppm$/.test(name)).sort().map((name) => {
     const path = join(cwd, name);
-    const digest = hash(readFileSync(path));
-    rmSync(path);
-    return digest;
+    return hash(readFileSync(path));
   });
   assert.equal(raster.length, pages);
   assert.equal(pageSizes.length, pages);
@@ -162,7 +163,7 @@ const samples = Object.fromEntries(Object.keys(cases).map((key) => [key, {
 const mirrors = [];
 let fixture;
 try {
-  fixture = await fixtureServer();
+  fixture = await fixtureServer({ largeImageShards: parityOnly ? 4 : 1 });
   for (const [id, entry] of Object.entries(cases)) mirrors.push({ id, entry, ...await registry(entry.archives) });
   for (let iteration = 0; iteration < repeats; iteration++) {
     // Rotate case order to keep caches and host contention from always
@@ -175,7 +176,6 @@ try {
       sample.install.push(measurement);
       if (mirror.entry.installOnly) {
         console.error(`${mirror.id} ${iteration + 1}/${repeats} · npx install ${measurement.installMs.toFixed(1)} ms`);
-        rmSync(work, { recursive: true, force: true });
         continue;
       }
       for (const flag of ['help', 'version']) {
@@ -237,6 +237,16 @@ try {
         };
       };
 
+      if (parityOnly) {
+        for (const name of Object.keys(fixtures)) await render(name, false, true);
+        if (localBrowsers) await render('daily', false, true, 'chromium');
+        sample.contracts ??= [];
+        sample.signatures ??= [];
+        sample.contracts.push({ ...sample.contract });
+        sample.signatures.push({ ...sample.pdfs });
+        console.error(`${mirror.id} ${iteration + 1}/${repeats} · parity fixtures rendered`);
+        continue;
+      }
       sample.warm.push(await render('daily', false, iteration === 0));
       if (iteration < 3 && !mirror.entry.warmOnly) await render('large', true, iteration === 0);
       if (iteration === 0 && !mirror.entry.warmOnly) {
@@ -244,14 +254,12 @@ try {
         if (localBrowsers) await render('daily', false, true, 'chromium');
       }
       console.error(`${mirror.id} ${iteration + 1}/${repeats} · warm ${sample.warm.at(-1).pdf.toFixed(1)} ms · npx install ${measurement.installMs.toFixed(1)} ms`);
-      rmSync(work, { recursive: true, force: true });
     }
   }
 } finally {
-  for (const { server } of [fixture, ...mirrors].filter(Boolean)) {
+  for (const { server } of [...(fixture?.servers ?? []), ...mirrors]) {
     server.closeAllConnections();
     server.close();
   }
-  rmSync(root, { force: true, recursive: true });
 }
 console.log(JSON.stringify(samples, null, 2));

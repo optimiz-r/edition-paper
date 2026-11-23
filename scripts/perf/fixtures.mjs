@@ -5,8 +5,8 @@ import { setTimeout } from 'node:timers/promises';
 export const latency = 300;
 export const fixtures = { daily: 12, large: 300, mixed: 4, empty: 0 };
 
-function story(i, fixture) {
-  const image = `<img loading="lazy" width="160" height="90" alt="" src="/image/${i}">`;
+function story(i, fixture, imageOrigin) {
+  const image = `<img loading="lazy" width="160" height="90" alt="" src="${imageOrigin}/image/${i}">`;
   return `<article class="story"><h2>Story ${i} · Café</h2>
     <p>A short update from the fixture desk. The edition includes local news and letters.</p>
     ${fixture === 'mixed' && i === 1 ? '<fixture-picture></fixture-picture>' : image}</article>`;
@@ -52,10 +52,11 @@ export async function listen(handler) {
   return { server, url: `http://127.0.0.1:${server.address().port}` };
 }
 
-export async function fixtureServer() {
+export async function fixtureServer({ largeImageShards = 1 } = {}) {
   let fixture = 'daily';
   const requests = [];
-  const result = await listen(async (request, response) => {
+  const servers = [];
+  const handler = async (request, response) => {
     const path = new URL(request.url, 'http://localhost').pathname;
     const start = performance.now();
     await setTimeout(latency);
@@ -65,7 +66,10 @@ export async function fixtureServer() {
       response.end(paper(fixture));
     } else if (type === 'stories' && Object.hasOwn(fixtures, name)) {
       response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify(Array.from({ length: fixtures[name] }, (_, i) => story(i + 1, name)).join('')));
+      response.end(JSON.stringify(Array.from({ length: fixtures[name] }, (_, i) => {
+        const imageOrigin = name === 'large' && largeImageShards > 1 ? servers[i % largeImageShards].url : '';
+        return story(i + 1, name, imageOrigin);
+      }).join('')));
     } else if (type === 'image') {
       response.writeHead(200, { 'Content-Type': 'image/svg+xml' });
       response.end(image(Number(name)));
@@ -73,6 +77,7 @@ export async function fixtureServer() {
       response.writeHead(404).end();
     }
     requests.push({ type, start, end: performance.now() });
-  });
-  return { ...result, requests, select: (name) => { fixture = name; requests.length = 0; } };
+  };
+  for (let i = 0; i < largeImageShards; i++) servers.push(await listen(handler));
+  return { ...servers[0], servers, requests, select: (name) => { fixture = name; requests.length = 0; } };
 }
