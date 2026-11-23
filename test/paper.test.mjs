@@ -111,6 +111,14 @@ test('printPdf: lpr, -P for a named printer, the PDF path on failure', () => {
   assert.equal(windows.unsupported, true);
 });
 
+test('printPdf does not start lpr after the deadline', () => {
+  let calls = 0;
+  const result = printPdf({ file: '/p/e.pdf', platform: 'linux', timeout: 0, exec: () => { calls++; } });
+  assert.equal(calls, 0);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /The PDF is at \/p\/e\.pdf\.$/);
+});
+
 test('countStories counts the printed copy, not the screen copy too', async () => {
   const page = (printColumns) => ({
     locator: (selector) => ({
