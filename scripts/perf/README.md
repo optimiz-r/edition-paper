@@ -39,6 +39,8 @@ browsers during a timed run.
 Warm timing starts before the CLI is spawned and ends after the PDF write
 completes, before Chromium shuts down or lpr is called. The loopback fixture
 applies 300 ms per request, including the document, feed and each image.
+Each warm sample records request paths and start/end times relative to CLI
+spawn. The query string is excluded.
 Cold timing starts before npx is spawned with an empty npm cache and ends
 at entry to the CLI. Counts include runtime dependencies but exclude
 edition-paper itself. Byte metrics include the CLI and its dependencies,
@@ -58,7 +60,9 @@ Validate parity separately with
 Use the two baselines and the final tarball in that manifest. The large
 fixture serves the same 300 images from four loopback ports so browser
 connection queues have time to deliver every image. Each still has 300 ms
-latency. This mode leaves the warm, install and memory scoring workload
+latency. The mixed fixture holds one successful image for an additional 900 ms
+in this mode and checks that only the broken image is reported. This mode
+leaves the warm, install and memory scoring workload
 alone. It also records memory separately for the complete large render.
 Run directories are printed to stderr and retained.
 

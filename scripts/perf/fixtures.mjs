@@ -52,7 +52,7 @@ export async function listen(handler) {
   return { server, url: `http://127.0.0.1:${server.address().port}` };
 }
 
-export async function fixtureServer({ largeImageShards = 1 } = {}) {
+export async function fixtureServer({ largeImageShards = 1, slowMixedImage = false } = {}) {
   let fixture = 'daily';
   const requests = [];
   const servers = [];
@@ -61,6 +61,7 @@ export async function fixtureServer({ largeImageShards = 1 } = {}) {
     const start = performance.now();
     await setTimeout(latency);
     const [, type, name] = path.split('/');
+    if (slowMixedImage && fixture === 'mixed' && path === '/image/1') await setTimeout(900);
     if (type === 'paper') {
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       response.end(paper(fixture));
@@ -76,7 +77,7 @@ export async function fixtureServer({ largeImageShards = 1 } = {}) {
     } else {
       response.writeHead(404).end();
     }
-    requests.push({ type, start, end: performance.now() });
+    requests.push({ path, type, start, end: performance.now() });
   };
   for (let i = 0; i < largeImageShards; i++) servers.push(await listen(handler));
   return { ...servers[0], servers, requests, select: (name) => { fixture = name; requests.length = 0; } };

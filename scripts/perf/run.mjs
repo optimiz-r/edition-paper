@@ -163,7 +163,7 @@ const samples = Object.fromEntries(Object.keys(cases).map((key) => [key, {
 const mirrors = [];
 let fixture;
 try {
-  fixture = await fixtureServer({ largeImageShards: parityOnly ? 4 : 1 });
+  fixture = await fixtureServer({ largeImageShards: parityOnly ? 4 : 1, slowMixedImage: parityOnly });
   for (const [id, entry] of Object.entries(cases)) mirrors.push({ id, entry, ...await registry(entry.archives) });
   for (let iteration = 0; iteration < repeats; iteration++) {
     // Rotate case order to keep caches and host contention from always
@@ -226,6 +226,12 @@ try {
         const requests = (type) => fixture.requests.filter((request) => request.type === type);
         const startOf = (type) => requests(type)[0].start - result.startAt;
         const endOf = (type) => Math.max(...requests(type).map((request) => request.end)) - result.startAt;
+        if (parityOnly && name === 'mixed') {
+          const slow = requests('image').find((request) => request.path === '/image/1');
+          assert(slow && endOf('image') <= result.markers.pdf, 'the slow image must finish before the PDF write');
+          const warnings = result.stderr.split('\n').filter((line) => line.startsWith('Printing without'));
+          assert.deepEqual(warnings, [`Printing without 1 picture that never loaded: ${fixture.url}/broken (failed to load)`]);
+        }
         return {
           pdf: result.markers.pdf,
           exit: result.ms,
@@ -234,11 +240,18 @@ try {
           compose: endOf('stories') - endOf('paper'),
           pictures: endOf('image') - endOf('stories'),
           afterPictures: result.markers.pdf - endOf('image'),
+          requests: fixture.requests.map(({ path, start, end }) => ({
+            path, start: start - result.startAt, end: end - result.startAt,
+          })).sort((a, b) => a.start - b.start),
         };
       };
 
       if (parityOnly) {
-        for (const name of Object.keys(fixtures)) await render(name, name === 'large', true);
+        sample.slowMixed ??= [];
+        for (const name of Object.keys(fixtures)) {
+          const timing = await render(name, name === 'large', true);
+          if (name === 'mixed') sample.slowMixed.push(timing);
+        }
         if (localBrowsers) await render('daily', false, true, 'chromium');
         sample.contracts ??= [];
         sample.signatures ??= [];

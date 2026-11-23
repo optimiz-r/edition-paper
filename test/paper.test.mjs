@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { printedImages } from '../lib/images.mjs';
-import { countStories, isAnalytics, localDate, pdfPath, printPdf, READY_SELECTOR, renderPaper } from '../lib/paper.mjs';
+import { countStories, isAnalytics, localDate, pdfPath, printPdf, READY_SELECTOR, READY_TIMEOUT_MS, renderPaper } from '../lib/paper.mjs';
 
 test('the PDF is named for the local date', () => {
   const now = new Date(2026, 0, 5, 8, 0); // 5 January 2026, 08:00 local
@@ -28,11 +28,40 @@ test("PostHog's servers are blocked; Edition's own files and the sources are not
   }
 });
 
+test('renderPaper uses the original ready wait when the marker probe fails', async () => {
+  const originalError = new Error('page.waitForSelector: Target page, context or browser has been closed');
+  const browser = {
+    newContext: async () => ({
+      route: async () => {},
+      newPage: async () => ({
+        goto: async () => {},
+        waitForFunction: async () => { throw new Error('The page-side probe failed'); },
+        waitForSelector: async (selector) => {
+          assert.equal(selector, READY_SELECTOR);
+          throw originalError;
+        },
+      }),
+    }),
+    close: async () => {},
+  };
+  await assert.rejects(
+    renderPaper({ url: 'http://127.0.0.1/paper', browser: 'auto', launch: async () => ({ browser, kind: 'chrome' }) }),
+    (error) => error === originalError,
+  );
+});
+
 test('renderPaper: no service worker, analytics blocked, waits for the ready flag and the pictures, A4', async () => {
   const log = [];
   const page = {
     goto: async (url, options) => log.push(['goto', url, options.waitUntil]),
-    waitForSelector: async (selector) => log.push(['wait', selector]),
+    waitForFunction: async (_predicate, selector, { timeout }) => {
+      log.push(['marker', selector, timeout]);
+      return { dispose: async () => log.push(['dispose marker']) };
+    },
+    waitForSelector: async (selector, { timeout }) => {
+      assert(timeout > 0 && timeout <= READY_TIMEOUT_MS);
+      log.push(['visible', selector]);
+    },
     emulateMedia: async (options) => log.push(['media', options.media]),
     evaluate: async (fn) => (log.push(['pictures', fn === printedImages]), { loaded: 3, pending: [], broken: [] }),
     locator: (selector) => ({
@@ -64,7 +93,9 @@ test('renderPaper: no service worker, analytics blocked, waits for the ready fla
     ['context', { serviceWorkers: 'block' }],
     ['route', true, true],
     ['goto', 'https://edition.cafe/paper?setup=W3s', 'domcontentloaded'],
-    ['wait', READY_SELECTOR],
+    ['marker', READY_SELECTOR, READY_TIMEOUT_MS],
+    ['dispose marker'],
+    ['visible', READY_SELECTOR],
     ['media', 'print'],
     ['pictures', true],
     ['count', '.print-columns'],
