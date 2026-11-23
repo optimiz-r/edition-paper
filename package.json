@@ -10,16 +10,14 @@
     "cli.mjs",
     "lib/",
     "README.md",
-    "LICENSE",
-    "vendor/playwright-core/"
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "test": "node --test",
-    "prepublishOnly": "node scripts/check-links.mjs && node --test",
-    "prepack": "node scripts/stage-playwright.mjs"
+    "prepublishOnly": "node scripts/check-links.mjs && node --test"
   },
   "keywords": [
     "edition",
@@ -43,7 +41,7 @@
   },
   "author": "Domenico Plumitallo",
   "license": "BSD-3-Clause",
-  "devDependencies": {
+  "dependencies": {
     "playwright-core": "1.65.1"
   }
 }

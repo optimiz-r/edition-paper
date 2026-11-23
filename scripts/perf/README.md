@@ -11,9 +11,10 @@ Use package tarballs obtained before the timed run.
   measured fresh install, and the second is the main lockfile version.
 - Export the baseline revision with `git archive e97ada5`, unpack to a
   temporary source directory, and run `npm pack` there.
-- Run `npm ci` and `npm pack` from the candidate checkout. The prepack script
-  copies the pinned Playwright runtime subset and upstream notices into the
-  tarball. The installed CLI runs without an npm install hook.
+- Run `npm ci` and `npm pack` from the candidate checkout. The
+  package uses the Playwright Core version pinned in its lockfile. Include its
+  archive in the benchmark manifest. The installed CLI runs without an npm
+  install hook.
 
 Example manifest
 

@@ -132,12 +132,9 @@ test('macOS: copies a self-contained runner, writes the agent, loads it', async 
   assert.equal(result.ok, true, result.message);
   assert.equal(preflightBrowser, 'auto');
 
-  // A packed build carries the driver in vendor; an unbuilt checkout copies
-  // its development install so the scheduled copy works independently too.
-  const driverDir = existsSync(join(PACKAGE_DIR, 'vendor', 'playwright-core', 'package.json')) ? 'vendor' : 'node_modules';
-  assert.deepEqual(readdirSync(paths.runnerDir).sort(), ['LICENSE', 'README.md', 'cli.mjs', 'lib', 'package.json', driverDir].sort());
+  assert.deepEqual(readdirSync(paths.runnerDir).sort(), ['LICENSE', 'README.md', 'cli.mjs', 'lib', 'node_modules', 'package.json']);
   assert.ok(existsSync(join(paths.runnerDir, 'lib', 'main.mjs')));
-  assert.ok(existsSync(join(paths.runnerDir, driverDir, 'playwright-core', 'package.json')));
+  assert.ok(existsSync(join(paths.runnerDir, 'node_modules', 'playwright-core', 'package.json')));
   assert.ok(!existsSync(join(paths.runnerDir, 'test')));
 
   const plist = readFileSync(paths.plist, 'utf8');
