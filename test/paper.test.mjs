@@ -74,6 +74,27 @@ test('renderPaper: no service worker, analytics blocked, waits for the ready fla
   ]);
 });
 
+test('navigation errors do not include the setup parameter', async () => {
+  const url = 'http://127.0.0.1:12345/paper?setup=c3ludGhldGlj';
+  const browser = {
+    newContext: async () => ({
+      route: async () => {},
+      newPage: async () => ({
+        goto: async () => { throw new Error(`page.goto: net::ERR_CONNECTION_REFUSED at ${url}\nCall log: …`); },
+      }),
+    }),
+    close: async () => {},
+  };
+  await assert.rejects(
+    renderPaper({ url, outFile: '/tmp/edition.pdf', browser: 'auto', launch: async () => ({ browser, kind: 'chrome' }) }),
+    (error) => {
+      assert.match(error.message, /Could not reach http:\/\/127\.0\.0\.1:12345 .*ERR_CONNECTION_REFUSED/);
+      assert.doesNotMatch(error.message, /setup=|c3ludGhldGlj|\n/);
+      return true;
+    },
+  );
+});
+
 test('renderPaper: an unreachable site is one sentence, and the browser still closes', async () => {
   let closed = false;
   const browser = {
