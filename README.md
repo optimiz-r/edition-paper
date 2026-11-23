@@ -92,8 +92,8 @@ never touches your Chrome profile, history or cookies.
 
 `--install-schedule 0800` does four things:
 
-1. It checks that a browser starts, so a missing browser shows up now rather than
-   at 8am in a log.
+1. It checks that a browser starts with the same settings the job will use, so
+   a missing browser shows up now rather than at 8am in a log.
 2. It copies this exact version of edition-paper and its Playwright Chromium driver to `~/Library/Application Support/Edition/paper/`.
 3. It writes a launchd agent, `~/Library/LaunchAgents/com.edition.paper.plist`,
    which runs that copy every day at 08:00 with the absolute path of your `node`.
@@ -158,6 +158,32 @@ with instructions instead:
 - **Windows:** a line to save as a `.cmd` file and schedule daily in Task
   Scheduler. Windows has no `lpr`, so there the paper is a PDF only.
 
+## Updating a daily run
+
+If your paper uses Playwright's Chromium, install the browser for the new
+version before changing the schedule. For edition-paper 1.1.0, run:
+
+```sh
+npx playwright@1.65.1 install chromium --only-shell
+```
+
+Run that as the same user as the job and with the same
+`PLAYWRIGHT_BROWSERS_PATH` if you set one. Use a persistent absolute directory
+for a shared cache. With the package-local setting `PLAYWRIGHT_BROWSERS_PATH=0`,
+provision through the new edition-paper command with
+`EDITION_PAPER_INSTALL_CHROMIUM=1` first, or switch to a shared absolute cache.
+
+Try the new command with `--no-print`. On macOS, rerun your install command
+with the new version to update the launchd copy. On Linux, rerun
+`--install-schedule` to get a new script and cron line. Keep the old schedule
+until the new command works. A scheduled run with a missing browser writes
+the matching install command to its log and exits with an error. The generated
+jobs leave downloading to you.
+
+The launchd agent and the script for cron keep your configured Chromium
+executable and browser cache paths. Relative browser cache paths are resolved
+when you set up the schedule.
+
 ## Uninstall
 
 ```
@@ -178,9 +204,9 @@ keeps its own copy of edition-paper in npm's cache (`~/.npm/_npx`).
 ## When something goes wrong
 
 - **"No browser to print with."** Install Google Chrome, or run the one command the
-  message gives you, `npx playwright@<version> install chromium`. The version
-  matches the installed driver. That command downloads both the full Chromium and
-  the headless shell. Archive sizes vary by platform.
+  message gives you, `npx playwright@<version> install chromium --only-shell`.
+  The version matches the installed driver. It downloads the headless shell
+  and FFmpeg. Archive sizes vary by platform.
 - **Prefer a smaller browser download?** On macOS and Linux, prefix the copied
   command with `EDITION_PAPER_INSTALL_CHROMIUM=1`, for example
   `EDITION_PAPER_INSTALL_CHROMIUM=1 npx edition-paper --setup <param> --no-print`.
@@ -194,7 +220,8 @@ keeps its own copy of edition-paper in npm's cache (`~/.npm/_npx`).
   to the absolute path of its trusted executable for this run. In `auto` mode
   Chrome still has priority. Before trying Playwright's managed Chromium, the
   CLI tries the supplied Chromium with a temporary profile and its sandbox
-  enabled. This setting applies to the command's environment.
+  enabled. Set it when you make the schedule to keep using that executable at
+  print time.
 - **"No stories rendered; not sending to the printer."** The page loaded but had
   nothing from the last 24 hours, or no source answered. The PDF is still saved, so
   you can open it and see which sections say "Could not reach".

@@ -45,8 +45,8 @@ test('with neither, one instruction pinned to the Playwright version in use', as
         'No browser to print with.',
         "  Google Chrome: Chromium distribution 'chrome' is not found at /opt/google/chrome/chrome",
         "  Playwright's Chromium: Executable doesn't exist at /home/ada/.cache/ms-playwright/chromium_headless_shell-1234/chrome",
-        "Install Google Chrome, or run this once to fetch Playwright's Chromium (about 150 MB):",
-        '  npx playwright@1.64.1 install chromium',
+        "Install Google Chrome, or run this once to fetch Playwright's Chromium (headless shell):",
+        '  npx playwright@1.64.1 install chromium --only-shell',
       ].join('\n')
     );
     return true;
@@ -106,5 +106,5 @@ test('an absolute system Chromium opt-in uses a sandbox and falls back to the ma
 
 test('the hint names the installed playwright-core version', () => {
   assert.match(playwrightVersion(), /^\d+\.\d+\.\d+/);
-  assert.equal(installHint(), `npx playwright@${playwrightVersion()} install chromium`);
+  assert.equal(installHint(), `npx playwright@${playwrightVersion()} install chromium --only-shell`);
 });
