@@ -55,3 +55,7 @@ test('hour and minute are checked again at the last step', () => {
   assert.throws(() => buildPlist({ ...golden(), minute: 60 }), /Bad minute/);
   assert.match(buildPlist({ ...golden(), hour: 0, minute: 0 }), /<integer>0<\/integer>\n {4}<key>Minute<\/key><integer>0<\/integer>/);
 });
+
+test('a carriage return is escaped so an XML parser preserves the argument', () => {
+  assert.equal(escapeXml('one\rtwo\r\nthree'), 'one&#13;two&#13;\nthree');
+});
