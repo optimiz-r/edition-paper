@@ -16,6 +16,7 @@ const mib = (values) => `${(median(values) / 1024).toFixed(1)} [${(Math.min(...v
 const warm = (data) => data.warm.map((run) => run.pdf);
 const install = (data) => data.install.map((run) => run.installMs);
 const tree = (data) => data.memory.map((run) => run.treeKiB);
+const pss = (data) => data.memory.map((run) => run.pssKiB);
 const allPdfsMatch = (data, baseline) => Object.keys(baseline.pdfs).length > 0
   && Object.entries(baseline.pdfs).every(([name, pdf]) => isDeepStrictEqual(data.pdfs[name], pdf));
 const both = (fn) => [published, main].every(fn);
@@ -37,7 +38,7 @@ console.log('| --- | --- | --- | --- | --- | --- |');
 console.log(`| T1 Warm to PDF | ${show((data) => ms(warm(data)))} | ≤50% of both baseline medians | ${verdict(current && both((base) => median(warm(current)) <= 0.5 * median(warm(base))))} |`);
 console.log(`| T2 Cold install | ${show(cold)} | ≥40% less time and archive bytes vs both | ${verdict(current && both((base) => median(install(current)) <= 0.6 * median(install(base)) && bytes(current) <= 0.6 * bytes(base)))} |`);
 console.log(`| T3 Browser onboarding | ${t3} | Name, size and progress ≤2 s; reuse installed browser | ${verdict(current && browser.current?.pass)} |`);
-console.log(`| T4 Large-edition RSS | ${show((data) => `tree ${mib(tree(data))}; GNU time ${mib(data.memory.map((run) => run.timeKiB))}; PSS ${mib(data.memory.map((run) => run.pssKiB))}`)} | Median tree ≤ both baseline medians; all samples ≤1 GB | ${verdict(current && both((base) => median(tree(current)) <= median(tree(base))) && Math.max(...tree(current)) * 1024 <= 1e9)} |`);
+console.log(`| T4 Peak large-edition memory | ${show((data) => `PSS ${pss(data).every(Number.isFinite) ? mib(pss(data)) : 'unmeasured'}; tree RSS ${mib(tree(data))}; GNU time ${mib(data.memory.map((run) => run.timeKiB))}`)} | Median tree PSS ≤ both baseline medians; all PSS samples ≤1 GB | ${verdict(current && both((base) => median(pss(current)) <= median(pss(base))) && Math.max(...pss(current)) * 1024 <= 1e9)} |`);
 console.log(`| T5 Info flags | ${show(fast)} | All ≤150 ms; no Playwright import | ${verdict(current && ['help', 'version'].every((flag) => Math.max(...current[flag]) <= 150 && !current.contract[`${flag}LoadsBrowser`]))} |`);
 console.log(`| T6 PDF parity | ${show(equivalent)} | Exact text, page count/size, and raster parity against both | ${verdict(current && both((base) => allPdfsMatch(current, base)))} |`);
 for (const [id, data] of Object.entries(results)) {
@@ -46,6 +47,7 @@ for (const [id, data] of Object.entries(results)) {
     console.log(`  ${key}: ${ms(data.warm.map((run) => run[key]))}`);
   }
   console.log(`  npx complete: ${ms(data.install.map((run) => run.npxMs))}`);
+  console.log(`  after PDF write to exit: ${ms(data.warm.map((run) => run.exit - run.pdf))}`);
   console.log(`  warm to PDF: ${ms(warm(data))}; install: ${cold(data)}`);
   if (data !== published) {
     console.log(`  matching published contract logs and statuses: ${isDeepStrictEqual(data.contract, published.contract)}`);
