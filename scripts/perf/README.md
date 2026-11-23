@@ -59,7 +59,8 @@ Use the two baselines and the final tarball in that manifest. The large
 fixture serves the same 300 images from four loopback ports so browser
 connection queues have time to deliver every image. Each still has 300 ms
 latency. This mode leaves the warm, install and memory scoring workload
-alone. Run directories are printed to stderr and retained.
+alone. It also records memory separately for the complete large render.
+Run directories are printed to stderr and retained.
 
 Use `"installOnly": true` for a cold-install-only control. This permits
 measuring npx's fixed overhead with a minimal tarball without a browser.

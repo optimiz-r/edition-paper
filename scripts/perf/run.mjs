@@ -238,7 +238,7 @@ try {
       };
 
       if (parityOnly) {
-        for (const name of Object.keys(fixtures)) await render(name, false, true);
+        for (const name of Object.keys(fixtures)) await render(name, name === 'large', true);
         if (localBrowsers) await render('daily', false, true, 'chromium');
         sample.contracts ??= [];
         sample.signatures ??= [];
