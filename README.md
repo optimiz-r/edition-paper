@@ -118,6 +118,10 @@ version), run the install again.
 wakes. If it is shut down, that morning's paper is skipped.
 
 **Logs.** `~/Library/Logs/edition-paper.log`. Each run starts with a dated line.
+Browser diagnostics in the CLI omit HTTP user information, queries and
+fragments. The CLI turns off Playwright debug traces because they can include
+request headers and your source list. Node and npm debug flags can still expose
+command arguments, so leave them off for scheduled runs.
 
 **Try it now** instead of waiting for tomorrow:
 
