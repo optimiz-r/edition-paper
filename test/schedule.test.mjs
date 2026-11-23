@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
@@ -139,6 +139,7 @@ test('macOS: copies a self-contained runner, writes the agent, loads it', async 
   assert.ok(!existsSync(join(paths.runnerDir, 'test')));
 
   const plist = readFileSync(paths.plist, 'utf8');
+  if (process.platform !== 'win32') assert.equal(statSync(paths.plist).mode & 0o777, 0o600);
   assert.ok(plist.includes('<string>/opt/homebrew/bin/node</string>'));
   assert.ok(plist.includes(`<string>${join(paths.runnerDir, 'cli.mjs')}</string>`));
   assert.ok(plist.includes(`<string>${SETUP}</string>`));
@@ -181,10 +182,12 @@ test('macOS: retries one launchd hiccup, and cleans up if loading fails for good
   assert.equal(flaky.calls.filter((c) => c[1] === 'bootstrap').length, 2);
 
   const broken = fakeLaunchctl({ failBootstrap: 2 });
-  const failed = await installSchedule({ ...base, options: install(home, []), exec: broken.exec });
+  const freshHome = tempHome();
+  const failed = await installSchedule({ ...base, home: freshHome, options: install(freshHome, []), exec: broken.exec });
   assert.equal(failed.ok, false);
   assert.equal(failed.message, 'Could not load the schedule into launchd: Bootstrap failed: 5: Input/output error');
-  assert.ok(!existsSync(schedulePaths(home).plist));
+  assert.ok(!existsSync(schedulePaths(freshHome).plist));
+  assert.ok(!existsSync(schedulePaths(freshHome).runnerDir));
 });
 
 test('macOS: no browser means no schedule', async () => {
@@ -244,4 +247,43 @@ test('node: a stable PATH link beats a versioned Homebrew Cellar path', () => {
   assert.equal(stableNodePath('/opt/homebrew/Cellar/node/24.1.0/bin/node', '/usr/local/bin:/opt/homebrew/bin:/usr/bin', realpath), '/opt/homebrew/bin/node');
   // nvm: no other name for it, so the binary itself.
   assert.equal(stableNodePath('/Users/ada/.nvm/versions/node/v24.13.0/bin/node', 'relative:/usr/bin', realpath), '/Users/ada/.nvm/versions/node/v24.13.0/bin/node');
+});
+
+test('macOS: a failed replacement keeps the previous runner and schedule', async () => {
+  const home = tempHome();
+  const paths = schedulePaths(home);
+  const base = { platform: 'darwin', home, packageDir: PACKAGE_DIR, nodePath: '/opt/homebrew/bin/node', uid: 501, sleep: async () => {} };
+  const first = await installSchedule({ ...base, version: '1.0.0', options: install(home, ['--no-print']), exec: fakeLaunchctl().exec });
+  assert.equal(first.ok, true);
+  const oldPlist = readFileSync(paths.plist, 'utf8');
+  const previousVersion = join(paths.runnerDir, 'previous-version-marker');
+  writeFileSync(previousVersion, 'old runner');
+
+  const failing = fakeLaunchctl({ failBootstrap: 2 });
+  const result = await installSchedule({
+    ...base, version: '1.0.1', options: install(home, ['--printer', 'New Printer']), exec: failing.exec,
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /Could not load the schedule into launchd/);
+  assert.equal(readFileSync(paths.plist, 'utf8'), oldPlist);
+  assert.equal(readFileSync(previousVersion, 'utf8'), 'old runner');
+  assert.deepEqual(failing.calls.at(-1), ['launchctl', 'bootstrap', 'gui/501', paths.plist]);
+  assert.equal(failing.calls.filter((call) => call[1] === 'bootstrap').length, 3);
+  assert.deepEqual(readdirSync(paths.supportDir), ['paper']);
+});
+
+test('macOS: invalid plist arguments fail before replacing the existing runner', async () => {
+  const home = tempHome();
+  const paths = schedulePaths(home);
+  const base = { platform: 'darwin', home, packageDir: PACKAGE_DIR, version: '1.0.0', nodePath: '/opt/homebrew/bin/node', uid: 501 };
+  const first = await installSchedule({ ...base, options: install(home, ['--no-print']), exec: fakeLaunchctl().exec });
+  assert.equal(first.ok, true);
+  const previousVersion = join(paths.runnerDir, 'previous-version-marker');
+  writeFileSync(previousVersion, 'old runner');
+
+  await assert.rejects(
+    installSchedule({ ...base, options: install(home, ['--printer', 'bell\u0007']), exec: () => assert.fail('must not call launchctl') }),
+    /control character/,
+  );
+  assert.equal(readFileSync(previousVersion, 'utf8'), 'old runner');
 });
