@@ -191,6 +191,11 @@ keeps its own copy of edition-paper in npm's cache (`~/.npm/_npx`).
   download progress as the response arrives. Any installed browser that already
   works with the selected mode is used immediately. `--browser chrome` still
   requires Chrome.
+- **Already have a system Chromium?** Set `EDITION_PAPER_CHROMIUM_EXECUTABLE`
+  to the absolute path of its trusted executable for this run. In `auto` mode
+  Chrome still has priority. Before trying Playwright's managed Chromium, the
+  CLI tries the supplied Chromium with a temporary profile and its sandbox
+  enabled. This setting applies to the command's environment.
 - **"No stories rendered; not sending to the printer."** The page loaded but had
   nothing from the last 24 hours, or no source answered. The PDF is still saved, so
   you can open it and see which sections say "Could not reach".

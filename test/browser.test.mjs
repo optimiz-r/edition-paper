@@ -86,6 +86,24 @@ test('opt-in installation retries Chromium only after launch fails', async () =>
   assert.deepEqual(attempts, ['chrome', 'chrome', 'chromium', 'install', 'chromium', 'chrome', 'chromium']);
 });
 
+test('an absolute system Chromium opt-in uses a sandbox and falls back to the managed browser', async () => {
+  const calls = [];
+  const systemExecutable = process.platform === 'win32' ? 'C:\\Trusted\\chrome.exe' : '/usr/bin/chromium';
+  const chromium = {
+    launch: async (options) => {
+      calls.push(options);
+      if (options.channel || options.executablePath) throw new Error('Unavailable');
+      return {};
+    },
+  };
+  assert.equal((await launchBrowser('auto', { chromium, systemExecutable })).kind, 'chromium');
+  assert.deepEqual(calls, [
+    { channel: 'chrome' },
+    { executablePath: systemExecutable, chromiumSandbox: true },
+    {},
+  ]);
+});
+
 test('the hint names the installed playwright-core version', () => {
   assert.match(playwrightVersion(), /^\d+\.\d+\.\d+/);
   assert.equal(installHint(), `npx playwright@${playwrightVersion()} install chromium`);
