@@ -260,8 +260,17 @@ test('macOS: a failed replacement keeps the previous runner and schedule', async
   writeFileSync(previousVersion, 'old runner');
 
   const failing = fakeLaunchctl({ failBootstrap: 2 });
+  let loaded = true;
   const result = await installSchedule({
-    ...base, version: '1.0.1', options: install(home, ['--printer', 'New Printer']), exec: failing.exec,
+    ...base, version: '1.0.1', options: install(home, ['--printer', 'New Printer']),
+    exec(command, args) {
+      if (loaded && args[0] === 'bootout' && args[2] === paths.plist) {
+        loaded = false;
+        failing.calls.push([command, ...args]);
+      } else {
+        failing.exec(command, args);
+      }
+    },
   });
   assert.equal(result.ok, false);
   assert.match(result.message, /Could not load the schedule into launchd/);
@@ -286,4 +295,19 @@ test('macOS: invalid plist arguments fail before replacing the existing runner',
     /control character/,
   );
   assert.equal(readFileSync(previousVersion, 'utf8'), 'old runner');
+});
+
+test('macOS: rollback does not load a previously unloaded agent', async () => {
+  const home = tempHome();
+  const paths = schedulePaths(home);
+  const options = install(home, ['--no-print']);
+  const base = { platform: 'darwin', home, packageDir: PACKAGE_DIR, version: '1.0.0', nodePath: '/opt/homebrew/bin/node', uid: 501, sleep: async () => {} };
+  assert.equal((await installSchedule({ ...base, options, exec: fakeLaunchctl().exec })).ok, true);
+  const oldPlist = readFileSync(paths.plist, 'utf8');
+
+  const unloaded = fakeLaunchctl({ failBootstrap: 2 });
+  const result = await installSchedule({ ...base, options: install(home, ['--printer', 'New queue']), exec: unloaded.exec });
+  assert.equal(result.ok, false);
+  assert.equal(readFileSync(paths.plist, 'utf8'), oldPlist);
+  assert.equal(unloaded.calls.filter((call) => call[1] === 'bootstrap').length, 2);
 });
