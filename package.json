@@ -10,17 +10,16 @@
     "cli.mjs",
     "lib/",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "vendor/playwright-core/"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "test": "node --test",
-    "prepublishOnly": "node scripts/check-links.mjs && node --test"
-  },
-  "dependencies": {
-    "playwright-core": "^1.64.1"
+    "prepublishOnly": "node scripts/check-links.mjs && node --test",
+    "prepack": "node scripts/stage-playwright.mjs"
   },
   "keywords": [
     "edition",
@@ -43,5 +42,8 @@
     "url": "https://github.com/optimiz-r/edition-paper/issues"
   },
   "author": "Domenico Plumitallo",
-  "license": "BSD-3-Clause"
+  "license": "BSD-3-Clause",
+  "devDependencies": {
+    "playwright-core": "1.65.1"
+  }
 }
