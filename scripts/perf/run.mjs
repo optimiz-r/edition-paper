@@ -23,10 +23,15 @@ mkdirSync(fakeBin);
 writeFileSync(join(fakeBin, 'lpr'), '#!/bin/sh\nprintf "%s\\n" "$@" >> "$EDITION_PERF_LPR"\n', { mode: 0o755 });
 const path = [fakeBin, resolve(node, '..'), ...process.env.PATH.split(delimiter)].join(delimiter);
 const procFs = process.platform === 'linux';
-const rss = (pid, children = true) => {
+const memoryOf = (pid) => {
+  let rss = 0;
+  let pss = 0;
   try {
-    const own = Number(/VmRSS:\s+(\d+)/.exec(readFileSync(`/proc/${pid}/status`, 'utf8'))?.[1] ?? 0);
-    if (!children) return own;
+    const status = readFileSync(`/proc/${pid}/smaps_rollup`, 'utf8');
+    rss = Number(/^Rss:\s+(\d+)/m.exec(status)?.[1] ?? 0);
+    pss = Number(/^Pss:\s+(\d+)/m.exec(status)?.[1] ?? 0);
+  } catch { /* process could exit during sampling */ }
+  try {
     // Children can have been spawned by threads besides the group leader.
     const pids = new Set();
     for (const tid of readdirSync(`/proc/${pid}/task`)) {
@@ -35,10 +40,13 @@ const rss = (pid, children = true) => {
         if (list) for (const child of list.split(/\s+/)) pids.add(child);
       } catch { /* thread exited while sampling */ }
     }
-    return own + [...pids].reduce((sum, child) => sum + rss(child), 0);
-  } catch {
-    return 0;
-  }
+    for (const child of pids) {
+      const measured = memoryOf(child);
+      rss += measured.rss;
+      pss += measured.pss;
+    }
+  } catch { /* process could exit during sampling */ }
+  return { rss, pss };
 };
 
 function run(command, args, { env, cwd, memory = false } = {}) {
@@ -49,9 +57,12 @@ function run(command, args, { env, cwd, memory = false } = {}) {
     let stdout = '';
     let stderr = '';
     let peakTree = 0;
+    let peakPss = 0;
     const sample = memory && procFs && setInterval(() => {
-      peakTree = Math.max(peakTree, rss(child.pid));
-    }, 25);
+      const { rss, pss } = memoryOf(child.pid);
+      peakTree = Math.max(peakTree, rss);
+      peakPss = Math.max(peakPss, pss);
+    }, 50);
     child.stdout.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
     child.stderr.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
     const timeout = setTimeout(() => child.kill('SIGTERM'), 310_000);
@@ -63,7 +74,7 @@ function run(command, args, { env, cwd, memory = false } = {}) {
       const markers = Object.fromEntries([...stderr.matchAll(/^@@perf (\w+) (\d+)$/gm)]
         .map(([, label, stamp]) => [label, Number(BigInt(stamp) - start) / 1e6]));
       resolve({
-        code, stdout, stderr, markers, startAt, peakTree,
+        code, stdout, stderr, markers, startAt, peakTree, peakPss,
         ms: Number(process.hrtime.bigint() - start) / 1e6,
       });
     });
@@ -170,7 +181,7 @@ try {
           const traced = await run(node, [cli, `--${flag}`], { env: { ...env, NODE_DEBUG: 'esm,module' }, cwd: work });
           check(traced, 0);
           sample.contract[flag] = result.stdout;
-          sample.contract[`${flag}LoadsBrowser`] = /node_modules\/playwright-core\//.test(traced.stderr);
+          sample.contract[`${flag}LoadsBrowser`] = /(?:node_modules|vendor)\/playwright-core\//.test(traced.stderr);
         }
       }
 
@@ -204,6 +215,7 @@ try {
           sample.memory.push({
             timeKiB: Number(/Maximum resident set size \(kbytes\):\s+(\d+)/.exec(log)[1]),
             treeKiB: result.peakTree,
+            pssKiB: result.peakPss,
           });
         }
         const requests = (type) => fixture.requests.filter((request) => request.type === type);
@@ -221,8 +233,8 @@ try {
       };
 
       sample.warm.push(await render('daily', false, iteration === 0));
-      if (iteration < 3) await render('large', true, iteration === 0);
-      if (iteration === 0) {
+      if (iteration < 3 && !mirror.entry.warmOnly) await render('large', true, iteration === 0);
+      if (iteration === 0 && !mirror.entry.warmOnly) {
         for (const name of ['mixed', 'empty']) await render(name, false, true);
         if (localBrowsers) await render('daily', false, true, 'chromium');
       }

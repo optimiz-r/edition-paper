@@ -37,7 +37,7 @@ console.log('| --- | --- | --- | --- | --- | --- |');
 console.log(`| T1 Warm to PDF | ${show((data) => ms(warm(data)))} | ≤50% of both baseline medians | ${verdict(current && both((base) => median(warm(current)) <= 0.5 * median(warm(base))))} |`);
 console.log(`| T2 Cold install | ${show(cold)} | ≥40% less time and archive bytes vs both | ${verdict(current && both((base) => median(install(current)) <= 0.6 * median(install(base)) && bytes(current) <= 0.6 * bytes(base)))} |`);
 console.log(`| T3 Browser onboarding | ${t3} | Name, size and progress ≤2 s; reuse installed browser | ${verdict(current && browser.current?.pass)} |`);
-console.log(`| T4 Large-edition RSS | ${show((data) => `tree ${mib(tree(data))}; GNU time ${mib(data.memory.map((run) => run.timeKiB))}`)} | Median tree ≤ both baseline medians; all samples ≤1 GB | ${verdict(current && both((base) => median(tree(current)) <= median(tree(base))) && Math.max(...tree(current)) * 1024 <= 1e9)} |`);
+console.log(`| T4 Large-edition RSS | ${show((data) => `tree ${mib(tree(data))}; GNU time ${mib(data.memory.map((run) => run.timeKiB))}; PSS ${mib(data.memory.map((run) => run.pssKiB))}`)} | Median tree ≤ both baseline medians; all samples ≤1 GB | ${verdict(current && both((base) => median(tree(current)) <= median(tree(base))) && Math.max(...tree(current)) * 1024 <= 1e9)} |`);
 console.log(`| T5 Info flags | ${show(fast)} | All ≤150 ms; no Playwright import | ${verdict(current && ['help', 'version'].every((flag) => Math.max(...current[flag]) <= 150 && !current.contract[`${flag}LoadsBrowser`]))} |`);
 console.log(`| T6 PDF parity | ${show(equivalent)} | Exact text, page count/size, and raster parity against both | ${verdict(current && both((base) => allPdfsMatch(current, base)))} |`);
 for (const [id, data] of Object.entries(results)) {
@@ -46,6 +46,7 @@ for (const [id, data] of Object.entries(results)) {
     console.log(`  ${key}: ${ms(data.warm.map((run) => run[key]))}`);
   }
   console.log(`  npx complete: ${ms(data.install.map((run) => run.npxMs))}`);
+  console.log(`  warm to PDF: ${ms(warm(data))}; install: ${cold(data)}`);
   if (data !== published) {
     console.log(`  matching published contract logs and statuses: ${isDeepStrictEqual(data.contract, published.contract)}`);
     console.log(`  differing PDFs vs published: ${Object.keys(data.pdfs).filter((name) => !isDeepStrictEqual(data.pdfs[name], published.pdfs[name])).join(', ') || 'none'}`);

@@ -32,8 +32,11 @@ at entry to the CLI. Counts include runtime dependencies but exclude
 edition-paper itself. Byte metrics include the CLI and its dependencies,
 and count transferred archives and regular installed files separately.
 Memory uses three independent 300-story runs per case, both GNU time's
-maximum RSS and a sampled sum of RSS across the process tree. The latter
-deliberately counts shared pages in each process. The pictures and failure
+maximum RSS and sampled totals for RSS and proportional set size (PSS)
+across the process tree. RSS counts shared pages in each process. PSS
+proportionally allocates shared pages. Set `"warmOnly": true` for an
+intermediate revision to sample installation and warm runs without running
+the large, mixed, empty and explicit managed Chromium cases. The pictures and failure
 fixture also covers lazy images in shadow DOM and a missing image.
 PDF comparisons use per-page sizes, layout-preserving extracted text and
 a digest for each page rasterized at 96 DPI.
