@@ -98,6 +98,14 @@ test('a data: URL is cut short in the log', async () => {
   assert.ok(warnings[0].length < 200);
 });
 
+test('picture warnings name the image without logging its HTTP credentials or query', async () => {
+  const warnings = [];
+  await waitForImages(fakePage([{
+    loaded: 0, pending: [], broken: ['https://example:placeholder@cdn.example/photo.jpg?signature=synthetic'],
+  }]), { warn: (message) => warnings.push(message), ...clock() });
+  assert.deepEqual(warnings, ['Printing without 1 picture that never loaded: https://cdn.example/photo.jpg (failed to load)']);
+});
+
 test("a page that can't be asked still gets printed", async () => {
   const warnings = [];
   const page = { evaluate: async () => Promise.reject(new Error('page.evaluate: Execution context was destroyed\nCall log: …')) };
