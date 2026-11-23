@@ -3,7 +3,19 @@
 Run on Linux with Node 20+, npm, GNU time and Poppler (pdfinfo, pdftotext,
 pdftoppm). The benchmark is opt-in and uses temporary homes, a loopback npm
 mirror and edition server, and a fake lpr. It never invokes a scheduler.
-Use package tarballs obtained before the timed run. For example:
+Use package tarballs obtained before the timed run.
+
+- Fetch the published archive and the exact dependency tarballs with
+  `npm pack edition-paper@1.0.0 playwright-core@1.65.1 playwright-core@1.64.1`
+  into a temporary directory. The first Playwright version reflects the
+  measured fresh install, and the second is the main lockfile version.
+- Export the baseline revision with `git archive e97ada5`, unpack to a
+  temporary source directory, and run `npm pack` there.
+- Run `npm ci` and `npm pack` from the candidate checkout. The prepack script
+  copies the pinned Playwright runtime subset and upstream notices into the
+  tarball. The installed CLI runs without an npm install hook.
+
+Example manifest
 
 ```json
 {
@@ -40,6 +52,9 @@ the large, mixed, empty and explicit managed Chromium cases. The pictures and fa
 fixture also covers lazy images in shadow DOM and a missing image.
 PDF comparisons use per-page sizes, layout-preserving extracted text and
 a digest for each page rasterized at 96 DPI.
+
+Use `"installOnly": true` for a cold-install-only control. This permits
+measuring npx's fixed overhead with a minimal tarball without a browser.
 
 To measure Chromium onboarding independently, pass
 `node scripts/perf/browser-download.mjs /tmp/browser-cases.json` a manifest

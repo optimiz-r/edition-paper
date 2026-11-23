@@ -173,6 +173,11 @@ try {
       const work = mkdtempSync(join(root, `${mirror.id}-`));
       const { cli, env, ...measurement } = await install(mirror.entry, mirror, work);
       sample.install.push(measurement);
+      if (mirror.entry.installOnly) {
+        console.error(`${mirror.id} ${iteration + 1}/${repeats} · npx install ${measurement.installMs.toFixed(1)} ms`);
+        rmSync(work, { recursive: true, force: true });
+        continue;
+      }
       for (const flag of ['help', 'version']) {
         const result = await run(node, [cli, `--${flag}`], { env, cwd: work });
         check(result, 0);
