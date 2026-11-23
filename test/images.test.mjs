@@ -36,7 +36,8 @@ test('finds the printed pictures inside nested shadow roots, and wakes the lazy 
     img({ src: '/images/channels/rss.svg', loading: 'lazy', complete: false, visible: false }),
     img({ src: null }),
   ]);
-  assert.deepEqual(printedImages(undefined, page), {
+  const { loaded, pending, broken } = printedImages(undefined, page);
+  assert.deepEqual({ loaded, pending, broken }, {
     loaded: 1,
     pending: ['https://design-milk.com/a.jpg'],
     broken: ['https://cdn.example/broken.png'],
@@ -49,50 +50,56 @@ test('printedImages works on its own, the way page.evaluate sends it', () => {
   // Playwright sends the function's source: anything it closed over in this
   // module would be undefined in the page.
   const sent = new Function(`return (${printedImages.toString()})`)();
-  assert.deepEqual(sent(undefined, root([img()])), { loaded: 1, pending: [], broken: [] });
+  assert.deepEqual(sent(undefined, root([img()])), {
+    loaded: 1, pending: [], broken: [], sources: [[img().src, img().src, null]], fontsReady: true,
+  });
 });
 
+const snapshot = (status) => ({ sources: [], fontsReady: true, ...status });
 const fakePage = (status) => ({
-  evaluate: async (fn, wait) => {
+  evaluate: async (fn, frame) => {
     assert.equal(fn, printedImages);
-    assert.equal(wait.timeout, IMAGES_TIMEOUT_MS);
-    return status;
+    assert.equal(frame, true);
+    return snapshot(status);
   },
 });
 
-test('waits for the last picture, then says nothing', async () => {
+test('waits for a complete scan and two matching frames while requests settle', async () => {
   const warnings = [];
-  const lead = Object.assign(new EventTarget(), img({ complete: false }));
-  const page = { evaluate: (fn, wait) => fn(wait, root([lead, img()])) };
-  const ready = waitForImages(page, { warn: (m) => warnings.push(m) });
-  lead.complete = true;
-  lead.naturalWidth = 896;
-  lead.dispatchEvent(new Event('load'));
-  assert.deepEqual(await ready, { loaded: 2, pending: [], broken: [] });
+  const lead = img({ complete: false });
+  let scans = 0;
+  const page = {
+    evaluate: (fn) => {
+      if (++scans === 2) {
+        lead.complete = true;
+        lead.naturalWidth = 896;
+        lead.currentSrc = lead.src;
+      }
+      return fn(false, root([lead, img()]));
+    },
+  };
+  const { loaded, pending, broken } = await waitForImages(page, {
+    networkQuiet: () => scans > 2,
+    warn: (m) => warnings.push(m),
+  });
+  assert.deepEqual({ loaded, pending, broken }, { loaded: 2, pending: [], broken: [] });
   assert.deepEqual(warnings, []);
 });
 
-test('rescans after pending pictures are removed without a load event', async () => {
-  const pending = Object.assign(new EventTarget(), img({ complete: false }));
-  const children = [pending];
-  const ready = printedImages({ timeout: 1000, interval: 1 }, root(children));
-  children.pop();
-  assert.deepEqual(await ready, { loaded: 0, pending: [], broken: [] });
-});
-
-test('the observer returns unresolved pictures at its deadline', async () => {
-  const lead = Object.assign(new EventTarget(), img({ complete: false }));
-  const result = await printedImages({ timeout: 5, interval: 250 }, root([lead]));
-  assert.deepEqual(result, { loaded: 0, pending: [lead.src], broken: [] });
+test('the deadline also bounds a browser frame that never arrives', async () => {
+  const warnings = [];
+  const page = { evaluate: () => new Promise(() => {}) };
+  assert.equal(await waitForImages(page, { timeout: 5, warn: (message) => warnings.push(message) }), null);
+  assert.deepEqual(warnings, ["The paper's resources were still loading after 0.005s; printing what settled."]);
 });
 
 test('gives up after 20 seconds and names every picture that never loaded', async () => {
   const warnings = [];
   const page = fakePage({ loaded: 4, pending: ['https://dead.example/photo.jpg'], broken: ['https://cdn.example/404.png'] });
-  await waitForImages(page, { warn: (m) => warnings.push(m) });
+  await waitForImages(page, { timeout: 5, warn: (m) => warnings.push(m) });
   assert.equal(IMAGES_TIMEOUT_MS, 20_000);
   assert.deepEqual(warnings, [
-    'Printing without 2 pictures that never loaded: https://dead.example/photo.jpg (still loading after 20s), https://cdn.example/404.png (failed to load)',
+    'Printing without 2 pictures that never loaded: https://dead.example/photo.jpg (still loading after 0.005s), https://cdn.example/404.png (failed to load)',
   ]);
 });
 
@@ -116,12 +123,13 @@ test('renderPaper prints after the pictures, and says which never came', async (
   const log = [];
   const warnings = [];
   const page = {
+    on() {},
     goto: async () => {},
     waitForSelector: async () => {},
     emulateMedia: async ({ media }) => log.push(`media ${media}`),
     evaluate: async () => {
-      log.push('look');
-      return { loaded: 1, pending: [], broken: ['https://dead.example/thumb.jpg'] };
+      if (!log.includes('look')) log.push('look');
+      return snapshot({ loaded: 1, pending: [], broken: ['https://dead.example/thumb.jpg'] });
     },
     locator: () => ({ count: async () => 0, locator: () => ({ count: async () => 0 }) }),
     pdf: async () => log.push('pdf'),

@@ -34,6 +34,7 @@ test('renderPaper uses the original ready wait when the marker probe fails', asy
     newContext: async () => ({
       route: async () => {},
       newPage: async () => ({
+        on() {},
         goto: async () => {},
         waitForFunction: async () => { throw new Error('The page-side probe failed'); },
         waitForSelector: async (selector) => {
@@ -53,6 +54,7 @@ test('renderPaper uses the original ready wait when the marker probe fails', asy
 test('renderPaper: no service worker, analytics blocked, waits for the ready flag and the pictures, A4', async () => {
   const log = [];
   const page = {
+    on() {},
     goto: async (url, options) => log.push(['goto', url, options.waitUntil]),
     waitForFunction: async (_predicate, selector, { timeout }) => {
       log.push(['marker', selector, timeout]);
@@ -63,7 +65,10 @@ test('renderPaper: no service worker, analytics blocked, waits for the ready fla
       log.push(['visible', selector]);
     },
     emulateMedia: async (options) => log.push(['media', options.media]),
-    evaluate: async (fn) => (log.push(['pictures', fn === printedImages]), { loaded: 3, pending: [], broken: [] }),
+    evaluate: async (fn) => {
+      if (!log.some(([event]) => event === 'pictures')) log.push(['pictures', fn === printedImages]);
+      return { loaded: 3, pending: [], broken: [], sources: [], fontsReady: true };
+    },
     locator: (selector) => ({
       count: async () => (log.push(['count', selector]), 1),
       locator: (inner) => ({ count: async () => (log.push(['count', `${selector} ${inner}`]), 41) }),
@@ -111,6 +116,7 @@ test('renderPaper: an unreachable site is one sentence, and the browser still cl
     newContext: async () => ({
       route: async () => {},
       newPage: async () => ({
+        on() {},
         goto: async () => {
           throw new Error('page.goto: net::ERR_NAME_NOT_RESOLVED at https://edition.cafe/paper\nCall log: …');
         },

@@ -83,3 +83,17 @@ bytes were actually transferred. Use browser archives for the selected
 Playwright versions and host platform, with the upstream archive layout.
 Pass the browser JSON as the second argument to report.mjs and the optional
 parity JSON as the third.
+
+## Print resource regression fixtures
+
+On Linux with Poppler (`pdftoppm`, `pdffonts`) and the pinned Chromium shell
+installed, run the six loopback fixtures with:
+
+```sh
+EDITION_PAPER_TEST_BROWSER=1 EDITION_PAPER_TEST_REPEATS=20 node --test test/readiness.test.mjs
+```
+
+Use `EDITION_PAPER_TEST_FONT` if DejaVu Sans Mono Bold is installed elsewhere.
+For a contended run, pin the fixture command and its browser to one available
+CPU with `taskset` and set `EDITION_PAPER_TEST_CPU_LOAD=1` to start a busy worker
+on the same CPU. PDFs stay in the test's temporary directory.
