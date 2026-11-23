@@ -1,0 +1,49 @@
+# edition-paper performance harness
+
+Run on Linux with Node 20+, npm, GNU time and Poppler (pdfinfo, pdftotext,
+pdftoppm). The benchmark is opt-in and uses temporary homes, a loopback npm
+mirror and edition server, and a fake lpr. It never invokes a scheduler.
+Use package tarballs obtained before the timed run. For example:
+
+```json
+{
+  "1.0.0": { "archives": ["/tmp/published/edition-paper-1.0.0.tgz", "/tmp/playwright-core-1.65.1.tgz"] },
+  "main": { "archives": ["/tmp/main/edition-paper-1.0.0.tgz", "/tmp/playwright-core-1.64.1.tgz"] },
+  "current": { "archives": ["/tmp/current/edition-paper-1.0.0.tgz", "/tmp/playwright-core-1.65.1.tgz"] }
+}
+```
+
+```sh
+node scripts/perf/run.mjs /tmp/cases.json 9 > /tmp/perf-results.json
+node scripts/perf/report.mjs /tmp/perf-results.json
+```
+
+The default Chrome path requires Google Chrome to be installed. To also check
+the explicit managed Chromium path for PDF parity, set
+`PLAYWRIGHT_BROWSERS_PATH` to a pre-populated cache with the browser builds
+matching the selected Playwright versions. The harness never fetches these
+browsers during a timed run.
+
+Warm timing starts before the CLI is spawned and ends after the PDF write
+completes, before Chromium shuts down or lpr is called. The loopback fixture
+applies 300 ms per request, including the document, feed and each image.
+Cold timing starts before npx is spawned with an empty npm cache and ends
+at entry to the CLI. Counts include runtime dependencies but exclude
+edition-paper itself. Byte metrics include the CLI and its dependencies,
+and count transferred archives and regular installed files separately.
+Memory uses three independent 300-story runs per case, both GNU time's
+maximum RSS and a sampled sum of RSS across the process tree. The latter
+deliberately counts shared pages in each process. The pictures and failure
+fixture also covers lazy images in shadow DOM and a missing image.
+PDF comparisons use per-page sizes, layout-preserving extracted text and
+a digest for each page rasterized at 96 DPI.
+
+To measure Chromium onboarding independently, pass
+`node scripts/perf/browser-download.mjs /tmp/browser-cases.json` a manifest
+with each case's installed `cli`, upstream Playwright Core `installer` and
+`archives` object pointing to local `chrome`, `shell`, and `ffmpeg` ZIPs.
+Set `optIn: true` for the candidate's opt-in first render. The mirror adds
+300 ms to archive responses, preserves content length and reports how many
+bytes were actually transferred. Use browser archives for the selected
+Playwright versions and host platform, with the upstream archive layout.
+Pass the resulting JSON as the second argument to report.mjs.
