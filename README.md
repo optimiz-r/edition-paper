@@ -216,3 +216,8 @@ keeps its own copy of edition-paper in npm's cache (`~/.npm/_npx`).
 ## License
 
 BSD-3-Clause. Copyright (c) 2026, Domenico Plumitallo. See [LICENSE](LICENSE).
+
+The npm package also ships a reduced distribution of Playwright Core under
+`vendor/playwright-core/`. Its upstream license, notices and third-party license
+files are included there. The included Playwright files are copied as shipped by
+upstream.
