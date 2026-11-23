@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -119,16 +119,21 @@ async function install(entry, mirror, work) {
   check(runResult, 0);
   assert.equal(runResult.stdout.trim(), '1.0.0');
   assert(Number.isFinite(runResult.markers.entry), 'npx must reach the CLI entry marker');
+  const tarballBytes = mirror.bytes() - before;
+  const expectedBytes = entry.archives.reduce((sum, file) => sum + statSync(file).size, 0);
+  assert.equal(tarballBytes, expectedBytes, 'cold npx must fetch each measured archive from the mirror');
   const npx = join(work, 'npm', '_npx');
   const modules = join(npx, readdirSync(npx).find((name) => !name.startsWith('.')), 'node_modules');
-  const cli = join(modules, 'edition-paper', 'cli.mjs');
+  const installed = join(modules, 'edition-paper');
+  assert(lstatSync(installed).isDirectory(), 'cold npx must install the tarball instead of linking a checkout');
+  const cli = join(installed, 'cli.mjs');
   return {
     cli, env,
     installMs: runResult.markers.entry,
     npxMs: runResult.ms,
-    tarballBytes: mirror.bytes() - before,
+    tarballBytes,
     unpackedBytes: size(modules),
-    ownBytes: size(join(modules, 'edition-paper')),
+    ownBytes: size(installed),
     dependencies: Object.keys(JSON.parse(readFileSync(join(modules, '.package-lock.json'), 'utf8')).packages).length - 1,
     archives: entry.archives.map((file) => basename(file)),
   };

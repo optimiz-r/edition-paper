@@ -65,6 +65,9 @@ in this mode and checks that only the broken image is reported. This mode
 leaves the warm, install and memory scoring workload
 alone. It also records memory separately for the complete large render.
 Run directories are printed to stderr and retained.
+Use a temporary directory outside an npm project for these runs so npx
+resolves the mirror package instead of an enclosing checkout. On Linux keep
+its path short enough for Chromium's Unix-domain socket.
 
 Use `"installOnly": true` for a cold-install-only control. This permits
 measuring npx's fixed overhead with a minimal tarball without a browser.
