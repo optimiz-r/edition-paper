@@ -8,7 +8,8 @@ import { setTimeout } from 'node:timers/promises';
 import { fixtureServer, listen } from './fixtures.mjs';
 
 const cases = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-const root = mkdtempSync(join(tmpdir(), 'edition-paper-download-'));
+// Per-case profiles below this path need to fit Chrome's Unix socket limit.
+const root = mkdtempSync(join(tmpdir(), 'ep-download-'));
 console.error(`Browser onboarding workspace ${root}`);
 const fixture = await fixtureServer();
 const results = {};
