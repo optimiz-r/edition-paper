@@ -53,6 +53,14 @@ fixture also covers lazy images in shadow DOM and a missing image.
 PDF comparisons use per-page sizes, layout-preserving extracted text and
 a digest for each page rasterized at 96 DPI.
 
+Validate parity separately with
+`node scripts/perf/run.mjs /tmp/cases.json 3 parity > /tmp/parity.json`.
+Use the two baselines and the final tarball in that manifest. The large
+fixture serves the same 300 images from four loopback ports so browser
+connection queues have time to deliver every image. Each still has 300 ms
+latency. This mode leaves the warm, install and memory scoring workload
+alone. Run directories are printed to stderr and retained.
+
 Use `"installOnly": true` for a cold-install-only control. This permits
 measuring npx's fixed overhead with a minimal tarball without a browser.
 
@@ -64,4 +72,5 @@ Set `optIn: true` for the candidate's opt-in first render. The mirror adds
 300 ms to archive responses, preserves content length and reports how many
 bytes were actually transferred. Use browser archives for the selected
 Playwright versions and host platform, with the upstream archive layout.
-Pass the resulting JSON as the second argument to report.mjs.
+Pass the browser JSON as the second argument to report.mjs and the optional
+parity JSON as the third.
