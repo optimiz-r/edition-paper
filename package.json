@@ -19,9 +19,6 @@
     "test": "node --test",
     "prepublishOnly": "node scripts/check-links.mjs && node --test"
   },
-  "dependencies": {
-    "playwright-core": "1.64.1"
-  },
   "keywords": [
     "edition",
     "edition.cafe",
@@ -43,5 +40,8 @@
     "url": "https://github.com/optimiz-r/edition-paper/issues"
   },
   "author": "Domenico Plumitallo",
-  "license": "BSD-3-Clause"
+  "license": "BSD-3-Clause",
+  "dependencies": {
+    "playwright-core": "1.65.1"
+  }
 }

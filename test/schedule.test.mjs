@@ -102,6 +102,79 @@ test('Linux: the cron recipe runs a long setup with literal shell characters', {
   assert.ok(!existsSync(join(home, 'injected')));
 });
 
+test('cron carries the checked browser paths and overrides download opt-in', { skip: process.platform === 'win32' }, () => {
+  const home = tempHome();
+  const bin = join(home, 'bin');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'npx'), '#!/bin/sh\nprintf "%s\\n" "$EDITION_PAPER_CHROMIUM_EXECUTABLE" "$PLAYWRIGHT_BROWSERS_PATH" "$XDG_CACHE_HOME" "$EDITION_PAPER_INSTALL_CHROMIUM"\n', { mode: 0o700 });
+  const executable = join(home, "Browser & O'Brien 100%");
+  const hint = otherPlatformHint({
+    platform: 'linux', options: install(home, ['--browser', 'chromium', '--no-print']),
+    version: '1.0.0', nodePath: join(bin, 'node'), home, cwd: join(home, 'ignored'),
+    env: {
+      EDITION_PAPER_CHROMIUM_EXECUTABLE: executable,
+      PLAYWRIGHT_BROWSERS_PATH: 'browsers 100%',
+      XDG_CACHE_HOME: join(home, 'cache'),
+      INIT_CWD: home,
+      EDITION_PAPER_INSTALL_CHROMIUM: '1',
+      HTTPS_PROXY: 'fixture-proxy-must-not-be-copied',
+    },
+  });
+  assert.doesNotMatch(hint, /fixture-proxy-must-not-be-copied/);
+  const lines = hint.split('\n');
+  const cronLine = lines.find((line) => line.startsWith('0 8 * * * '));
+  assert.equal(cronLine, '0 8 * * * /bin/sh "$HOME/edition-paper.sh" >> "$HOME/edition-paper.log" 2>&1');
+  const script = lines.slice(lines.indexOf('#!/bin/sh'), lines.indexOf('#!/bin/sh') + 2).join('\n');
+  writeFileSync(join(home, 'edition-paper.sh'), script + '\n', { mode: 0o600 });
+  const result = spawnSync('/bin/sh', ['-c', cronLine.slice('0 8 * * * '.length)], {
+    cwd: home, env: { HOME: home, PATH: '/usr/bin:/bin', EDITION_PAPER_INSTALL_CHROMIUM: '1' }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(readFileSync(join(home, 'edition-paper.log'), 'utf8').trimEnd().split('\n'), [
+    executable, join(home, 'browsers 100%'), join(home, 'cache'), '0',
+  ]);
+});
+
+test('launchd receives the same configured browser environment as preflight', async () => {
+  const home = tempHome();
+  const { calls, exec } = fakeLaunchctl();
+  const executable = join(home, 'Browser & Tools\r');
+  let checkedEnvironment;
+  const result = await installSchedule({
+    options: install(home, ['--browser', 'chromium', '--no-print']),
+    platform: 'darwin', home, packageDir: PACKAGE_DIR, version: '1.0.0',
+    nodePath: '/opt/homebrew/bin/node', uid: 501, exec, cwd: home,
+    env: {
+      EDITION_PAPER_CHROMIUM_EXECUTABLE: executable,
+      EDITION_PAPER_INSTALL_CHROMIUM: '1',
+      PLAYWRIGHT_BROWSERS_PATH: 'cached browsers',
+      XDG_CACHE_HOME: '/fixture/xdg',
+      TMPDIR: '/fixture/tmp',
+      PWDEBUG: '1',
+    },
+    preflight: async (choice, env) => {
+      assert.equal(choice, 'chromium');
+      checkedEnvironment = env;
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(checkedEnvironment, {
+    HOME: home, PATH: '/opt/homebrew/bin:/usr/bin:/bin',
+    EDITION_PAPER_INSTALL_CHROMIUM: '0',
+    EDITION_PAPER_CHROMIUM_EXECUTABLE: executable,
+    PLAYWRIGHT_BROWSERS_PATH: join(home, 'cached browsers'),
+    XDG_CACHE_HOME: '/fixture/xdg',
+    TMPDIR: '/fixture/tmp',
+  });
+  const plist = readFileSync(schedulePaths(home).plist, 'utf8');
+  const envBlock = /<key>EnvironmentVariables<\/key>\s*<dict>([\s\S]*?)<\/dict>/.exec(plist);
+  assert.ok(envBlock);
+  const parsed = Object.fromEntries([...envBlock[1].matchAll(/<key>([^<]+)<\/key><string>([^<]*)<\/string>/g)]
+    .map(([, key, value]) => [key, value.replaceAll('&#13;', '\r').replaceAll('&amp;', '&')]));
+  assert.deepEqual(parsed, checkedEnvironment);
+  assert.equal(calls.at(-1)[1], 'bootstrap');
+});
+
 test('Windows: a Task Scheduler recipe, PDF only', () => {
   const options = parseCliArgs(['--setup', SETUP, '--install-schedule', '0800', '--printer', 'Office', '--out', '/Papers/100% news'], { home: '/home/ada', cwd: '/' });
   const message = otherPlatformHint({ platform: 'win32', options, version: '1.0.0' });
@@ -132,7 +205,6 @@ test('macOS: copies a self-contained runner, writes the agent, loads it', async 
   assert.equal(result.ok, true, result.message);
   assert.equal(preflightBrowser, 'auto');
 
-  // The runner is the published files plus node_modules, nothing from the dev checkout.
   assert.deepEqual(readdirSync(paths.runnerDir).sort(), ['LICENSE', 'README.md', 'cli.mjs', 'lib', 'node_modules', 'package.json']);
   assert.ok(existsSync(join(paths.runnerDir, 'lib', 'main.mjs')));
   assert.ok(existsSync(join(paths.runnerDir, 'node_modules', 'playwright-core', 'package.json')));
