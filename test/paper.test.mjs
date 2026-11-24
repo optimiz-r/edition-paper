@@ -115,6 +115,34 @@ test('renderPaper: an unreachable site is one sentence, and the browser still cl
   assert.ok(closed);
 });
 
+test('an empty HTTP error page keeps the PDF and reports the HTTP status', async () => {
+  const warnings = [];
+  let saved = false;
+  const page = {
+    goto: async () => ({ status: () => 429 }),
+    waitForSelector: async () => {},
+    emulateMedia: async () => {},
+    evaluate: async () => ({ loaded: 0, pending: [], broken: [] }),
+    locator: () => ({ count: async () => 0 }),
+    pdf: async () => { saved = true; },
+  };
+  const browser = {
+    newContext: async () => ({ route: async () => {}, newPage: async () => page }),
+    close: async () => {},
+  };
+  const result = await renderPaper({
+    url: 'http://localhost:12345/paper?setup=W3t9XQ',
+    outFile: '/tmp/edition.pdf',
+    browser: 'auto',
+    warn: (message) => warnings.push(message),
+    launch: async () => ({ browser, kind: 'chrome' }),
+  });
+  assert.ok(saved);
+  assert.equal(result.stories, 0);
+  assert.equal(result.httpStatus, 429);
+  assert.deepEqual(warnings, []);
+});
+
 test('printPdf: lpr, -P for a named printer, the PDF path on failure', () => {
   const calls = [];
   const ok = printPdf({ file: '/p/e.pdf', printer: 'My Printer', platform: 'darwin', exec: (cmd, args) => calls.push([cmd, ...args]) });
