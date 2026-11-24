@@ -88,14 +88,21 @@ test('gives up after 20 seconds and names every picture that never loaded', asyn
   ]);
 });
 
-test('a data: URL is cut short in the log', async () => {
+test('an inline image is named without including its contents', async () => {
   const warnings = [];
   await waitForImages(fakePage([{ loaded: 0, pending: [], broken: [`data:image/png;base64,${'A'.repeat(5000)}`] }]), {
     warn: (m) => warnings.push(m),
     ...clock(),
   });
-  assert.match(warnings[0], /^Printing without 1 picture that never loaded: data:image\/png;base64,A+\.\.\. \(failed to load\)$/);
-  assert.ok(warnings[0].length < 200);
+  assert.deepEqual(warnings, ['Printing without 1 picture that never loaded: inline image (failed to load)']);
+});
+
+test('picture warnings name the image without logging its HTTP credentials or query', async () => {
+  const warnings = [];
+  await waitForImages(fakePage([{
+    loaded: 0, pending: [], broken: ['https://example:placeholder@cdn.example/photo.jpg?signature=synthetic'],
+  }]), { warn: (message) => warnings.push(message), ...clock() });
+  assert.deepEqual(warnings, ['Printing without 1 picture that never loaded: https://cdn.example/photo.jpg (failed to load)']);
 });
 
 test("a page that can't be asked still gets printed", async () => {
