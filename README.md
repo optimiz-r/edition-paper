@@ -179,7 +179,7 @@ keeps its own copy of edition-paper in npm's cache (`~/.npm/_npx`).
 ## When something goes wrong
 
 - **"No browser to print with."** Install Google Chrome, or run the one command the
-  message gives you, `npx playwright@<version> install chromium` (about 150 MB). The
+  message gives you, `npx playwright@<version> install chromium`. The
   version is pinned to the Playwright this CLI uses, so the browser matches.
 - **"No stories rendered; not sending to the printer."** The page loaded but had
   nothing from the last 24 hours, or no source answered. The PDF is still saved, so

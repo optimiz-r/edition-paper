@@ -45,7 +45,7 @@ test('with neither, one instruction pinned to the Playwright version in use', as
         'No browser to print with.',
         "  Google Chrome: Chromium distribution 'chrome' is not found at /opt/google/chrome/chrome",
         "  Playwright's Chromium: Executable doesn't exist at /home/ada/.cache/ms-playwright/chromium_headless_shell-1234/chrome",
-        "Install Google Chrome, or run this once to fetch Playwright's Chromium (about 150 MB):",
+        "Install Google Chrome, or run this once to fetch Playwright's Chromium:",
         '  npx playwright@1.64.1 install chromium',
       ].join('\n')
     );
@@ -63,6 +63,15 @@ test('--browser chromium skips Chrome', async () => {
   const chromium = fakeChromium(['chrome', 'chromium']);
   assert.equal((await launchBrowser('chromium', { chromium })).kind, 'chromium');
   assert.deepEqual(chromium.attempts, ['chromium']);
+});
+
+test('a missing explicit Chromium gives a remedy for that browser', async () => {
+  const chromium = fakeChromium([]);
+  await assert.rejects(launchBrowser('chromium', { chromium, version: '1.64.1' }), (error) => {
+    assert.match(error.message, /npx playwright@1\.64\.1 install chromium/);
+    assert.doesNotMatch(error.message, /Install Google Chrome/);
+    return true;
+  });
 });
 
 test('the hint names the installed playwright-core version', () => {
