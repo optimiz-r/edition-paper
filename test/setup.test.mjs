@@ -85,3 +85,22 @@ test('a mangled paste fails here, in words, not as an empty paper', () => {
     assert.throws(() => readSetup(value), (error) => error instanceof UsageError && /not one Edition made/.test(error.message), value.slice(0, 20));
   }
 });
+
+test('setup decoding handles a table of input types, encodings and sizes', () => {
+  const max = encodeLikeTheApp([{ id: 'x'.repeat(MAX_SETUP_LENGTH * 3 / 4 - '[{"id":""}]'.length) }]);
+  assert.equal(max.length, MAX_SETUP_LENGTH);
+  for (const [label, input, count] of [
+    ['one object', encodeLikeTheApp([{ id: 'news' }]), 1],
+    ['Unicode array', encodeLikeTheApp([{ name: 'Café' }, { name: '新聞 📰' }]), 2],
+    ['at the encoded limit', max, 1],
+    ['over the encoded limit', `${max}ww`, null],
+    ['null', encodeLikeTheApp(null), null],
+    ['empty array', encodeLikeTheApp([]), null],
+    ['unencoded input', '[{}]', null],
+    ['truncated UTF-8', Buffer.from([0x5b, 0x22, 0xe2]).toString('base64url'), null],
+    ['non-string', 123, null],
+  ]) {
+    if (count === null) assert.throws(() => readSetup(input), UsageError, label);
+    else assert.deepEqual(readSetup(input), { setup: input, sources: count }, label);
+  }
+});
