@@ -117,7 +117,7 @@ async function install(entry, mirror, work) {
     env: { ...env, NODE_OPTIONS: `--require "${probe}"`, EDITION_PERF_MARK_ENTRY: '1' },
   });
   check(runResult, 0);
-  assert.equal(runResult.stdout.trim(), '1.0.0');
+  assert.equal(runResult.stdout.trim(), mirror.editionPaperVersion);
   assert(Number.isFinite(runResult.markers.entry), 'npx must reach the CLI entry marker');
   const tarballBytes = mirror.bytes() - before;
   const expectedBytes = entry.archives.reduce((sum, file) => sum + statSync(file).size, 0);

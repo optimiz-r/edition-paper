@@ -48,5 +48,5 @@ export async function registry(archives) {
       },
     }));
   });
-  return { ...running, bytes: () => bytes };
+  return { ...running, editionPaperVersion: packages.get('edition-paper')?.manifest.version, bytes: () => bytes };
 }

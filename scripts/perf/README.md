@@ -22,7 +22,7 @@ Example manifest
 {
   "1.0.0": { "archives": ["/tmp/published/edition-paper-1.0.0.tgz", "/tmp/playwright-core-1.65.1.tgz"] },
   "main": { "archives": ["/tmp/main/edition-paper-1.0.0.tgz", "/tmp/playwright-core-1.64.1.tgz"] },
-  "current": { "archives": ["/tmp/current/edition-paper-1.0.0.tgz", "/tmp/playwright-core-1.65.1.tgz"] }
+  "current": { "archives": ["/tmp/current/edition-paper-1.1.0.tgz", "/tmp/playwright-core-1.65.1.tgz"] }
 }
 ```
 
