@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import { printedImages } from '../lib/images.mjs';
 import { countStories, isAnalytics, localDate, pdfPath, printPdf, READY_SELECTOR, renderPaper } from '../lib/paper.mjs';
@@ -159,6 +160,14 @@ test('printPdf: lpr, -P for a named printer, the PDF path on failure', () => {
   assert.equal(windows.unsupported, true);
 });
 
+test('printPdf does not start lpr after the deadline', () => {
+  let calls = 0;
+  const result = printPdf({ file: '/p/e.pdf', platform: 'linux', timeout: 0, exec: () => { calls++; } });
+  assert.equal(calls, 0);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /The PDF is at \/p\/e\.pdf\.$/);
+});
+
 test('countStories counts the printed copy, not the screen copy too', async () => {
   const page = (printColumns) => ({
     locator: (selector) => ({
@@ -170,4 +179,22 @@ test('countStories counts the printed copy, not the screen copy too', async () =
   // If the app drops .print-columns, fall back to every story rather than 0.
   assert.equal(await countStories(page(0)), 54);
   assert.equal(await countStories({ locator: () => ({ count: async () => { throw new Error('closed'); } }) }), 0);
+});
+
+test('printPdf bounds a stalled print command', { skip: process.platform === 'win32' }, () => {
+  const file = '/p/edition.pdf';
+  const result = printPdf({
+    file,
+    platform: 'linux',
+    timeout: 100,
+    exec: (command, args, options) => {
+      assert.equal(command, 'lpr');
+      assert.deepEqual(args, [file]);
+      // Exercise the actual child-process timeout without invoking CUPS.
+      // The child self-terminates if the regression is present.
+      execFileSync(process.execPath, ['-e', 'setTimeout(() => {}, 500)'], options);
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /Printing failed .* The PDF is at \/p\/edition\.pdf\./);
 });
