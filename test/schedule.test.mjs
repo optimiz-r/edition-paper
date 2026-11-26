@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
@@ -102,6 +102,79 @@ test('Linux: the cron recipe runs a long setup with literal shell characters', {
   assert.ok(!existsSync(join(home, 'injected')));
 });
 
+test('cron carries the checked browser paths and overrides download opt-in', { skip: process.platform === 'win32' }, () => {
+  const home = tempHome();
+  const bin = join(home, 'bin');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'npx'), '#!/bin/sh\nprintf "%s\\n" "$EDITION_PAPER_CHROMIUM_EXECUTABLE" "$PLAYWRIGHT_BROWSERS_PATH" "$XDG_CACHE_HOME" "$EDITION_PAPER_INSTALL_CHROMIUM"\n', { mode: 0o700 });
+  const executable = join(home, "Browser & O'Brien 100%");
+  const hint = otherPlatformHint({
+    platform: 'linux', options: install(home, ['--browser', 'chromium', '--no-print']),
+    version: '1.0.0', nodePath: join(bin, 'node'), home, cwd: join(home, 'ignored'),
+    env: {
+      EDITION_PAPER_CHROMIUM_EXECUTABLE: executable,
+      PLAYWRIGHT_BROWSERS_PATH: 'browsers 100%',
+      XDG_CACHE_HOME: join(home, 'cache'),
+      INIT_CWD: home,
+      EDITION_PAPER_INSTALL_CHROMIUM: '1',
+      HTTPS_PROXY: 'fixture-proxy-must-not-be-copied',
+    },
+  });
+  assert.doesNotMatch(hint, /fixture-proxy-must-not-be-copied/);
+  const lines = hint.split('\n');
+  const cronLine = lines.find((line) => line.startsWith('0 8 * * * '));
+  assert.equal(cronLine, '0 8 * * * /bin/sh "$HOME/edition-paper.sh" >> "$HOME/edition-paper.log" 2>&1');
+  const script = lines.slice(lines.indexOf('#!/bin/sh'), lines.indexOf('#!/bin/sh') + 2).join('\n');
+  writeFileSync(join(home, 'edition-paper.sh'), script + '\n', { mode: 0o600 });
+  const result = spawnSync('/bin/sh', ['-c', cronLine.slice('0 8 * * * '.length)], {
+    cwd: home, env: { HOME: home, PATH: '/usr/bin:/bin', EDITION_PAPER_INSTALL_CHROMIUM: '1' }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(readFileSync(join(home, 'edition-paper.log'), 'utf8').trimEnd().split('\n'), [
+    executable, join(home, 'browsers 100%'), join(home, 'cache'), '0',
+  ]);
+});
+
+test('launchd receives the same configured browser environment as preflight', async () => {
+  const home = tempHome();
+  const { calls, exec } = fakeLaunchctl();
+  const executable = join(home, 'Browser & Tools\r');
+  let checkedEnvironment;
+  const result = await installSchedule({
+    options: install(home, ['--browser', 'chromium', '--no-print']),
+    platform: 'darwin', home, packageDir: PACKAGE_DIR, version: '1.0.0',
+    nodePath: '/opt/homebrew/bin/node', uid: 501, exec, cwd: home,
+    env: {
+      EDITION_PAPER_CHROMIUM_EXECUTABLE: executable,
+      EDITION_PAPER_INSTALL_CHROMIUM: '1',
+      PLAYWRIGHT_BROWSERS_PATH: 'cached browsers',
+      XDG_CACHE_HOME: '/fixture/xdg',
+      TMPDIR: '/fixture/tmp',
+      PWDEBUG: '1',
+    },
+    preflight: async (choice, env) => {
+      assert.equal(choice, 'chromium');
+      checkedEnvironment = env;
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(checkedEnvironment, {
+    HOME: home, PATH: '/opt/homebrew/bin:/usr/bin:/bin',
+    EDITION_PAPER_INSTALL_CHROMIUM: '0',
+    EDITION_PAPER_CHROMIUM_EXECUTABLE: executable,
+    PLAYWRIGHT_BROWSERS_PATH: join(home, 'cached browsers'),
+    XDG_CACHE_HOME: '/fixture/xdg',
+    TMPDIR: '/fixture/tmp',
+  });
+  const plist = readFileSync(schedulePaths(home).plist, 'utf8');
+  const envBlock = /<key>EnvironmentVariables<\/key>\s*<dict>([\s\S]*?)<\/dict>/.exec(plist);
+  assert.ok(envBlock);
+  const parsed = Object.fromEntries([...envBlock[1].matchAll(/<key>([^<]+)<\/key><string>([^<]*)<\/string>/g)]
+    .map(([, key, value]) => [key, value.replaceAll('&#13;', '\r').replaceAll('&amp;', '&')]));
+  assert.deepEqual(parsed, checkedEnvironment);
+  assert.equal(calls.at(-1)[1], 'bootstrap');
+});
+
 test('Windows: a Task Scheduler recipe, PDF only', () => {
   const options = parseCliArgs(['--setup', SETUP, '--install-schedule', '0800', '--printer', 'Office', '--out', '/Papers/100% news'], { home: '/home/ada', cwd: '/' });
   const message = otherPlatformHint({ platform: 'win32', options, version: '1.0.0' });
@@ -132,13 +205,13 @@ test('macOS: copies a self-contained runner, writes the agent, loads it', async 
   assert.equal(result.ok, true, result.message);
   assert.equal(preflightBrowser, 'auto');
 
-  // The runner is the published files plus node_modules, nothing from the dev checkout.
   assert.deepEqual(readdirSync(paths.runnerDir).sort(), ['LICENSE', 'README.md', 'cli.mjs', 'lib', 'node_modules', 'package.json']);
   assert.ok(existsSync(join(paths.runnerDir, 'lib', 'main.mjs')));
   assert.ok(existsSync(join(paths.runnerDir, 'node_modules', 'playwright-core', 'package.json')));
   assert.ok(!existsSync(join(paths.runnerDir, 'test')));
 
   const plist = readFileSync(paths.plist, 'utf8');
+  if (process.platform !== 'win32') assert.equal(statSync(paths.plist).mode & 0o777, 0o600);
   assert.ok(plist.includes('<string>/opt/homebrew/bin/node</string>'));
   assert.ok(plist.includes(`<string>${join(paths.runnerDir, 'cli.mjs')}</string>`));
   assert.ok(plist.includes(`<string>${SETUP}</string>`));
@@ -181,10 +254,12 @@ test('macOS: retries one launchd hiccup, and cleans up if loading fails for good
   assert.equal(flaky.calls.filter((c) => c[1] === 'bootstrap').length, 2);
 
   const broken = fakeLaunchctl({ failBootstrap: 2 });
-  const failed = await installSchedule({ ...base, options: install(home, []), exec: broken.exec });
+  const freshHome = tempHome();
+  const failed = await installSchedule({ ...base, home: freshHome, options: install(freshHome, []), exec: broken.exec });
   assert.equal(failed.ok, false);
   assert.equal(failed.message, 'Could not load the schedule into launchd: Bootstrap failed: 5: Input/output error');
-  assert.ok(!existsSync(schedulePaths(home).plist));
+  assert.ok(!existsSync(schedulePaths(freshHome).plist));
+  assert.ok(!existsSync(schedulePaths(freshHome).runnerDir));
 });
 
 test('macOS: no browser means no schedule', async () => {
@@ -244,4 +319,67 @@ test('node: a stable PATH link beats a versioned Homebrew Cellar path', () => {
   assert.equal(stableNodePath('/opt/homebrew/Cellar/node/24.1.0/bin/node', '/usr/local/bin:/opt/homebrew/bin:/usr/bin', realpath), '/opt/homebrew/bin/node');
   // nvm: no other name for it, so the binary itself.
   assert.equal(stableNodePath('/Users/ada/.nvm/versions/node/v24.13.0/bin/node', 'relative:/usr/bin', realpath), '/Users/ada/.nvm/versions/node/v24.13.0/bin/node');
+});
+
+test('macOS: a failed replacement keeps the previous runner and schedule', async () => {
+  const home = tempHome();
+  const paths = schedulePaths(home);
+  const base = { platform: 'darwin', home, packageDir: PACKAGE_DIR, nodePath: '/opt/homebrew/bin/node', uid: 501, sleep: async () => {} };
+  const first = await installSchedule({ ...base, version: '1.0.0', options: install(home, ['--no-print']), exec: fakeLaunchctl().exec });
+  assert.equal(first.ok, true);
+  const oldPlist = readFileSync(paths.plist, 'utf8');
+  const previousVersion = join(paths.runnerDir, 'previous-version-marker');
+  writeFileSync(previousVersion, 'old runner');
+
+  const failing = fakeLaunchctl({ failBootstrap: 2 });
+  let loaded = true;
+  const result = await installSchedule({
+    ...base, version: '1.0.1', options: install(home, ['--printer', 'New Printer']),
+    exec(command, args) {
+      if (loaded && args[0] === 'bootout' && args[2] === paths.plist) {
+        loaded = false;
+        failing.calls.push([command, ...args]);
+      } else {
+        failing.exec(command, args);
+      }
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /Could not load the schedule into launchd/);
+  assert.equal(readFileSync(paths.plist, 'utf8'), oldPlist);
+  assert.equal(readFileSync(previousVersion, 'utf8'), 'old runner');
+  assert.deepEqual(failing.calls.at(-1), ['launchctl', 'bootstrap', 'gui/501', paths.plist]);
+  assert.equal(failing.calls.filter((call) => call[1] === 'bootstrap').length, 3);
+  assert.deepEqual(readdirSync(paths.supportDir), ['paper']);
+});
+
+test('macOS: invalid plist arguments fail before replacing the existing runner', async () => {
+  const home = tempHome();
+  const paths = schedulePaths(home);
+  const base = { platform: 'darwin', home, packageDir: PACKAGE_DIR, version: '1.0.0', nodePath: '/opt/homebrew/bin/node', uid: 501 };
+  const first = await installSchedule({ ...base, options: install(home, ['--no-print']), exec: fakeLaunchctl().exec });
+  assert.equal(first.ok, true);
+  const previousVersion = join(paths.runnerDir, 'previous-version-marker');
+  writeFileSync(previousVersion, 'old runner');
+
+  await assert.rejects(
+    installSchedule({ ...base, options: install(home, ['--printer', 'bell\u0007']), exec: () => assert.fail('must not call launchctl') }),
+    /control character/,
+  );
+  assert.equal(readFileSync(previousVersion, 'utf8'), 'old runner');
+});
+
+test('macOS: rollback does not load a previously unloaded agent', async () => {
+  const home = tempHome();
+  const paths = schedulePaths(home);
+  const options = install(home, ['--no-print']);
+  const base = { platform: 'darwin', home, packageDir: PACKAGE_DIR, version: '1.0.0', nodePath: '/opt/homebrew/bin/node', uid: 501, sleep: async () => {} };
+  assert.equal((await installSchedule({ ...base, options, exec: fakeLaunchctl().exec })).ok, true);
+  const oldPlist = readFileSync(paths.plist, 'utf8');
+
+  const unloaded = fakeLaunchctl({ failBootstrap: 2 });
+  const result = await installSchedule({ ...base, options: install(home, ['--printer', 'New queue']), exec: unloaded.exec });
+  assert.equal(result.ok, false);
+  assert.equal(readFileSync(paths.plist, 'utf8'), oldPlist);
+  assert.equal(unloaded.calls.filter((call) => call[1] === 'bootstrap').length, 2);
 });

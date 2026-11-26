@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { parseCliArgs, parseTime, scheduledArgs, UsageError } from '../lib/args.mjs';
 
@@ -88,4 +89,57 @@ test('the scheduled run repeats only what the reader chose', () => {
   );
   // --no-print wins over --printer, as it does on a manual run.
   assert.deepEqual(scheduledArgs(parse('--setup', SETUP, '--printer', 'P', '--no-print')), ['--setup', SETUP, '--no-print']);
+});
+
+test('argument matrix preserves last-value and informational-flag behavior', () => {
+  const paired = [
+    ['setup', 'malformed', SETUP, 'setup', SETUP],
+    ['browser', 'invalid', 'chrome', 'browser', 'chrome'],
+    ['url', 'invalid', 'http://localhost:5173', 'url', 'http://localhost:5173'],
+    ['out', 'Papers', 'Papers été', 'outDir', resolve(ctx.cwd, 'Papers été')],
+    ['printer', 'Office', "Ada's & Co", 'printer', "Ada's & Co"],
+    ['install-schedule', 'invalid', '08:05', 'time', { hour: 8, minute: 5 }],
+  ];
+  for (const [flag, first, last, property, expected] of paired) {
+    assert.deepEqual(parse('--setup', SETUP, `--${flag}=${first}`, `--${flag}`, last)[property], expected, flag);
+  }
+  for (const [flag, property, expected] of [
+    ['no-print', 'print', false],
+    ['uninstall-schedule', 'command', 'uninstall'],
+    ['help', 'command', 'help'],
+    ['version', 'command', 'version'],
+  ]) {
+    assert.equal(parse('--setup', SETUP, `--${flag}`, `--${flag}`)[property], expected, flag);
+  }
+});
+
+test('argument matrix rejects missing values and boolean assignments', () => {
+  for (const flag of ['setup', 'browser', 'url', 'out', 'printer', 'install-schedule']) {
+    rejects([`--${flag}`], /argument missing/);
+  }
+  for (const flag of ['no-print', 'uninstall-schedule', 'help', 'version']) {
+    for (const value of ['', 'false', '123', ';']) {
+      rejects([`--${flag}=${value}`], /does not take an argument/);
+    }
+  }
+  for (const [flag, pattern] of [
+    ['setup', /not one Edition made/],
+    ['browser', /auto, chrome or chromium/],
+    ['url', /must be a web address/],
+    ['printer', /needs a printer name/],
+    ['install-schedule', /Use HHMM/],
+  ]) {
+    rejects(['--setup', SETUP, `--${flag}=`], pattern);
+  }
+});
+
+test('argument errors stay on one line when input contains control characters', () => {
+  for (const token of ['stray\nword', '--unknown\r\noption', 'forged\u001B[2J', 'stray\u2028word']) {
+    assert.throws(() => parse('--setup', SETUP, token), (error) => {
+      assert.ok(error instanceof UsageError);
+      assert.match(error.message, /Run edition-paper --help/);
+      assert.doesNotMatch(error.message, /[\r\n\u001B\u2028]/);
+      return true;
+    });
+  }
 });

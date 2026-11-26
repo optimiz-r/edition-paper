@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import { printedImages } from '../lib/images.mjs';
-import { countStories, isAnalytics, localDate, pdfPath, printPdf, READY_SELECTOR, renderPaper } from '../lib/paper.mjs';
+import { countStories, isAnalytics, localDate, pdfPath, printPdf, READY_SELECTOR, READY_TIMEOUT_MS, renderPaper } from '../lib/paper.mjs';
 
 test('the PDF is named for the local date', () => {
   const now = new Date(2026, 0, 5, 8, 0); // 5 January 2026, 08:00 local
@@ -28,13 +29,47 @@ test("PostHog's servers are blocked; Edition's own files and the sources are not
   }
 });
 
+test('renderPaper uses the original ready wait when the marker probe fails', async () => {
+  const originalError = new Error('page.waitForSelector: Target page, context or browser has been closed');
+  const browser = {
+    newContext: async () => ({
+      route: async () => {},
+      newPage: async () => ({
+        on() {},
+        goto: async () => {},
+        waitForFunction: async () => { throw new Error('The page-side probe failed'); },
+        waitForSelector: async (selector) => {
+          assert.equal(selector, READY_SELECTOR);
+          throw originalError;
+        },
+      }),
+    }),
+    close: async () => {},
+  };
+  await assert.rejects(
+    renderPaper({ url: 'http://127.0.0.1/paper', browser: 'auto', launch: async () => ({ browser, kind: 'chrome' }) }),
+    (error) => error === originalError,
+  );
+});
+
 test('renderPaper: no service worker, analytics blocked, waits for the ready flag and the pictures, A4', async () => {
   const log = [];
   const page = {
+    on() {},
     goto: async (url, options) => log.push(['goto', url, options.waitUntil]),
-    waitForSelector: async (selector) => log.push(['wait', selector]),
+    waitForFunction: async (_predicate, selector, { timeout }) => {
+      log.push(['marker', selector, timeout]);
+      return { dispose: async () => log.push(['dispose marker']) };
+    },
+    waitForSelector: async (selector, { timeout }) => {
+      assert(timeout > 0 && timeout <= READY_TIMEOUT_MS);
+      log.push(['visible', selector]);
+    },
     emulateMedia: async (options) => log.push(['media', options.media]),
-    evaluate: async (fn) => (log.push(['pictures', fn === printedImages]), { loaded: 3, pending: [], broken: [] }),
+    evaluate: async (fn) => {
+      if (!log.some(([event]) => event === 'pictures')) log.push(['pictures', fn === printedImages]);
+      return { loaded: 3, pending: [], broken: [], sources: [], fontsReady: true };
+    },
     locator: (selector) => ({
       count: async () => (log.push(['count', selector]), 1),
       locator: (inner) => ({ count: async () => (log.push(['count', `${selector} ${inner}`]), 41) }),
@@ -64,7 +99,9 @@ test('renderPaper: no service worker, analytics blocked, waits for the ready fla
     ['context', { serviceWorkers: 'block' }],
     ['route', true, true],
     ['goto', 'https://edition.cafe/paper?setup=W3s', 'domcontentloaded'],
-    ['wait', READY_SELECTOR],
+    ['marker', READY_SELECTOR, READY_TIMEOUT_MS],
+    ['dispose marker'],
+    ['visible', READY_SELECTOR],
     ['media', 'print'],
     ['pictures', true],
     ['count', '.print-columns'],
@@ -74,12 +111,35 @@ test('renderPaper: no service worker, analytics blocked, waits for the ready fla
   ]);
 });
 
+test('navigation errors do not include the setup parameter or URL credentials', async () => {
+  const url = 'http://example:placeholder@127.0.0.1:12345/paper?setup=c3ludGhldGlj';
+  const browser = {
+    newContext: async () => ({
+      route: async () => {},
+      newPage: async () => ({
+        on() {},
+        goto: async () => { throw new Error(`page.goto: net::ERR_CONNECTION_REFUSED at ${url}\nCall log: …`); },
+      }),
+    }),
+    close: async () => {},
+  };
+  await assert.rejects(
+    renderPaper({ url, outFile: '/tmp/edition.pdf', browser: 'auto', launch: async () => ({ browser, kind: 'chrome' }) }),
+    (error) => {
+      assert.match(error.message, /Could not reach http:\/\/127\.0\.0\.1:12345 .*ERR_CONNECTION_REFUSED/);
+      assert.doesNotMatch(error.message, /setup=|c3ludGhldGlj|placeholder|\n/);
+      return true;
+    },
+  );
+});
+
 test('renderPaper: an unreachable site is one sentence, and the browser still closes', async () => {
   let closed = false;
   const browser = {
     newContext: async () => ({
       route: async () => {},
       newPage: async () => ({
+        on() {},
         goto: async () => {
           throw new Error('page.goto: net::ERR_NAME_NOT_RESOLVED at https://edition.cafe/paper\nCall log: …');
         },
@@ -92,6 +152,35 @@ test('renderPaper: an unreachable site is one sentence, and the browser still cl
     { message: 'Could not reach https://edition.cafe (page.goto: net::ERR_NAME_NOT_RESOLVED at https://edition.cafe/paper). Is the site up?' }
   );
   assert.ok(closed);
+});
+
+test('an empty HTTP error page keeps the PDF and reports the HTTP status', async () => {
+  const warnings = [];
+  let saved = false;
+  const page = {
+    on() {},
+    goto: async () => ({ status: () => 429 }),
+    waitForSelector: async () => {},
+    emulateMedia: async () => {},
+    evaluate: async () => ({ loaded: 0, pending: [], broken: [], sources: [], fontsReady: true }),
+    locator: () => ({ count: async () => 0 }),
+    pdf: async () => { saved = true; },
+  };
+  const browser = {
+    newContext: async () => ({ route: async () => {}, newPage: async () => page }),
+    close: async () => {},
+  };
+  const result = await renderPaper({
+    url: 'http://localhost:12345/paper?setup=W3t9XQ',
+    outFile: '/tmp/edition.pdf',
+    browser: 'auto',
+    warn: (message) => warnings.push(message),
+    launch: async () => ({ browser, kind: 'chrome' }),
+  });
+  assert.ok(saved);
+  assert.equal(result.stories, 0);
+  assert.equal(result.httpStatus, 429);
+  assert.deepEqual(warnings, []);
 });
 
 test('printPdf: lpr, -P for a named printer, the PDF path on failure', () => {
@@ -110,6 +199,14 @@ test('printPdf: lpr, -P for a named printer, the PDF path on failure', () => {
   assert.equal(windows.unsupported, true);
 });
 
+test('printPdf does not start lpr after the deadline', () => {
+  let calls = 0;
+  const result = printPdf({ file: '/p/e.pdf', platform: 'linux', timeout: 0, exec: () => { calls++; } });
+  assert.equal(calls, 0);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /The PDF is at \/p\/e\.pdf\.$/);
+});
+
 test('countStories counts the printed copy, not the screen copy too', async () => {
   const page = (printColumns) => ({
     locator: (selector) => ({
@@ -121,4 +218,22 @@ test('countStories counts the printed copy, not the screen copy too', async () =
   // If the app drops .print-columns, fall back to every story rather than 0.
   assert.equal(await countStories(page(0)), 54);
   assert.equal(await countStories({ locator: () => ({ count: async () => { throw new Error('closed'); } }) }), 0);
+});
+
+test('printPdf bounds a stalled print command', { skip: process.platform === 'win32' }, () => {
+  const file = '/p/edition.pdf';
+  const result = printPdf({
+    file,
+    platform: 'linux',
+    timeout: 100,
+    exec: (command, args, options) => {
+      assert.equal(command, 'lpr');
+      assert.deepEqual(args, [file]);
+      // Exercise the actual child-process timeout without invoking CUPS.
+      // The child self-terminates if the regression is present.
+      execFileSync(process.execPath, ['-e', 'setTimeout(() => {}, 500)'], options);
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /Printing failed .* The PDF is at \/p\/edition\.pdf\./);
 });
